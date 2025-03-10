@@ -21,7 +21,7 @@ install Clojure, Babashka and bbin. Clojure scripting runtime.
 
 Once =bbin= is installed in your environment, run this in a terminal:
 
-- =bbin install https://raw.githubusercontent.com/bzg/org-utils/refs/heads/main/src/subscribe.clj=
+- =bbin install https://raw.githubusercontent.com/bzg/utils/refs/heads/main/src/subscribe.clj=
 
 * Support the Clojure(script) ecosystem
 
