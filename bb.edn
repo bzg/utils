@@ -1,0 +1,5 @@
+{:version     "0.1"
+ :description "Various tools"
+ :url         "https://github.com/bzg/utils"
+ :license     {:name "Eclipse Public License - v 2.0"
+               :url  "http://www.eclipse.org/legal/epl-v20.html"}}
