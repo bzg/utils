@@ -10,6 +10,7 @@
 ;; MAILGUN_LIST_ID (example: "my@list.com")
 ;; MAILGUN_API_ENDPOINT (example "https://api.eu.mailgun.net/v3")
 ;; MAILGUN_API_KEY (example "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
+;; SUBSCRIBE_BASE_PATH (optional, example: "/app" - for subdirectory deployments)
 ;;
 ;; Running the web application as http://localhost:8080
 ;;
@@ -30,18 +31,20 @@
          '[babashka.http-client :as http]
          '[clojure.string :as str]
          '[cheshire.core :as json]
-         '[clojure.tools.logging :as log]
+         '[taoensso.timbre :as log]
          '[clojure.edn :as edn])
-
-;; Configure basic logging
-(def logging-config
-  {:level     :debug
-   :console   true
-   :appenders {:println {:min-level :debug
-                         :fn        #(println %)}}})
 
 ;; Default language setting
 (def default-language :en)
+
+;; Default logging level
+(def log-min-level :info)
+
+;; Configure Timbre logging
+(log/merge-config!
+ {:min-level      log-min-level
+  :timestamp-opts {:pattern "yyyy-MM-dd HH:mm:ss"}
+  :appenders      {:println {:enabled? true}}})
 
 ;; Anti-Spam protections
 (def rate-limit-window (* 60 60 1000)) ;; 1 hour in milliseconds
@@ -59,10 +62,30 @@
   (or (System/getenv "MAILGUN_API_KEY")
       (log/error "Missing MAILGUN_API_KEY")))
 
+;; Base path configuration for subdirectory deployments
+(def base-path
+  (let [path (or (System/getenv "SUBSCRIBE_BASE_PATH") "")]
+    (if (str/blank? path)
+      ""
+      (if (str/ends-with? path "/")
+        (str/replace path #"/$" "")  ;; Remove trailing slash
+        path))))
+
 ;; Log configuration
 (log/info "MAILGUN_LIST_ID:" mailgun-list-id)
 (log/info "MAILGUN_API_ENDPOINT:" mailgun-api-endpoint)
 (log/info "MAILGUN_API_KEY:" (if mailgun-api-key "****" "Not set"))
+(log/info "SUBSCRIBE_BASE_PATH:" (if (str/blank? base-path) "[not set]" base-path))
+
+;; Helper function to construct paths with the base path
+(defn make-path [& segments]
+  (let [segments (remove str/blank? segments)]
+    (str base-path
+         (if (and (not (str/blank? base-path))
+                  (not (str/starts-with? (first segments) "/")))
+           "/"
+           "")
+         (str/join "/" segments))))
 
 ;; Centralized Mailgun Authentication Helper
 (defn get-mailgun-auth-header
@@ -197,6 +220,7 @@
   (try
     (if (.exists (java.io.File. file-path))
       (let [config-content (slurp file-path)]
+        (log/info "Reading configuration from:" file-path)
         (edn/read-string config-content))
       (do
         (log/warn "Configuration file not found:" file-path)
@@ -234,6 +258,7 @@
 ;; Process configuration file
 (defn process-config-file [file-path]
   (when file-path
+    (log/info "Using configuration file:" file-path)
     (let [config-data (read-config-file file-path)]
       (when (validate-config config-data)
         (merge-ui-strings! config-data)))))
@@ -409,7 +434,7 @@
           <p>%s</p>
         </header>
 
-        <form hx-post=\"/subscribe\" hx-target=\"#result\" hx-swap=\"outerHTML\" hx-indicator=\"#loading\">
+        <form hx-post=\"%s/subscribe\" hx-target=\"#result\" hx-swap=\"outerHTML\" hx-indicator=\"#loading\">
           <input type=\"email\" id=\"email\" name=\"email\" placeholder=\"%s\" required>
 
           <!-- CSRF Protection -->
@@ -438,8 +463,9 @@
           (:title (:page strings))
           (:heading (:page strings))
           (:subheading (:page strings))
+          base-path               ;; Add base path to form action
           (:email-placeholder (:form strings))
-          csrf-token           ;; Pass the CSRF token to the form
+          csrf-token
           (:website-label (:form strings))
           (:subscribe-button (:form strings))
           (:unsubscribe-button (:form strings))))
@@ -506,14 +532,11 @@
 ;; Updated check-if-subscribed function
 (defn check-if-subscribed [email]
   (log/info "Checking if email is already subscribed:" email)
-
   (let [url      (get-mailgun-member-url email)
         _        (log/debug "Making request to check subscription status:" url)
         response (make-mailgun-request :get url nil)]
-
     (log/debug "Mailgun API check response status:" (:status response))
     (log/debug "Mailgun API check response body:" (:body response))
-
     (and (not (:error response))
          (= 200 (:status response)))))
 
@@ -589,6 +612,16 @@
          :debug   {:status (:status response)
                    :body   (:body response)}}))))
 
+;; Function to normalize URI for path matching
+(defn normalize-uri [uri]
+  (let [uri-without-base (if (and (not (str/blank? base-path))
+                                  (str/starts-with? uri base-path))
+                           (let [path (subs uri (count base-path))]
+                             (if (str/blank? path) "/" path))
+                           uri)]
+    (log/debug "Normalized URI from" uri "to" uri-without-base)
+    uri-without-base))
+
 ;; Request handlers
 (defn handle-index [req]
   (let [lang       (determine-language req)
@@ -596,7 +629,9 @@
         csrf-token (generate-csrf-token)]
     {:status  200
      :headers {"Content-Type" "text/html"
-               "Set-Cookie"   (format "csrf_token=%s; Path=/; HttpOnly; SameSite=Strict" csrf-token)}
+               "Set-Cookie"   (format "csrf_token=%s; Path=%s; HttpOnly; SameSite=Strict"
+                                      csrf-token
+                                      (if (str/blank? base-path) "/" base-path))}
      :body    (build-index-html strings lang csrf-token)}))
 
 (defn parse-form-data [request]
@@ -798,7 +833,8 @@
   (let [lang       (determine-language req)
         debug-info {:env        {:mailgun-list-id      mailgun-list-id
                                  :mailgun-api-endpoint mailgun-api-endpoint
-                                 :mailgun-api-key      "****"}
+                                 :mailgun-api-key      "****"
+                                 :base-path            base-path}
                     :i18n       {:current-language    (name lang)
                                  :available-languages (keys ui-strings)
                                  :browser-language    (get-in req [:headers "accept-language"])}
@@ -815,10 +851,14 @@
 ;; Main app with routes
 (defn app [req]
   (let [uri             (:uri req)
+        normalized-uri  (normalize-uri uri)
         query-params    (parse-query-params uri)
         req-with-params (assoc req :query-params query-params)]
     (try
-      (case [(:request-method req) uri]
+      (log/debug "Processing request:" (:request-method req) uri)
+      (log/debug "Normalized path:" normalized-uri)
+
+      (case [(:request-method req) normalized-uri]
         [:get "/"]           (handle-index req-with-params)
         [:post "/subscribe"] (handle-subscribe req-with-params)
         [:get "/debug"]      (handle-debug req-with-params)
@@ -845,13 +885,14 @@
 (defn start-server [& [port]]
   (let [port (or port 8080)]
     (log/info (str "Starting server on http://localhost:" port))
+    (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
     (server/run-server app {:port port})))
 
 ;; Main entry point
 (when (= *file* (System/getProperty "babashka.file"))
   (let [args        *command-line-args*
         ;; Check if first argument is a valid port number
-        port        (if (and (seq args) 
+        port        (if (and (seq args)
                              (try (Integer/parseInt (first args)) true
                                   (catch NumberFormatException _ false)))
                       (Integer/parseInt (first args))
@@ -867,6 +908,7 @@
                  mailgun-api-key)
       (log/error "Missing environment variable")
       (do (log/info (str "Starting server on http://localhost:" port))
+          (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
           (server/run-server app {:port port})
           ;; Keep the server running
           @(promise)))))
