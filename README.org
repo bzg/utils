@@ -12,12 +12,15 @@ To get or provide feedback, simply send an email to *bzg@bzg.fr*.
 
 * Install and update
 
-The scripts are written in [[https://clojure.org][Clojure]] with [[https://babashka.org][Babashka]]. You will need to
-install Clojure, Babashka and bbin. Clojure scripting runtime.
+The scripts are written in [[https://clojure.org][Clojure]] with [[https://babashka.org][Babashka]] and we recommend installing them with [[https://github.com/babashka/bbin][bbin]].
 
 - [[https://clojure.org/guides/install_clojure][Install Clojure]]
 - [[https://github.com/babashka/babashka#installation][Install babashka]]
 - [[https://github.com/babashka/bbin#installation][Install bbin]]
+
+This should take care of installing all you need:
+
+: ~$ brew install babashka/brew/bbin
 
 Once =bbin= is installed in your environment, run this in a terminal:
 
