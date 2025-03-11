@@ -529,7 +529,6 @@
 (defn error-result [strings message debug-info]
   (debug-result-template strings "error" :operation-failed message debug-info))
 
-;; Updated check-if-subscribed function
 (defn check-if-subscribed [email]
   (log/info "Checking if email is already subscribed:" email)
   (let [url      (get-mailgun-member-url email)
@@ -540,7 +539,6 @@
     (and (not (:error response))
          (= 200 (:status response)))))
 
-;; Updated unsubscribe-from-mailgun function
 (defn unsubscribe-from-mailgun [email]
   (log/info "Attempting to unsubscribe email:" email)
 
@@ -578,7 +576,12 @@
          :debug   {:status (:status response)
                    :body   (:body response)}}))))
 
-;; Updated subscribe-to-mailgun function
+(def subscription-count (atom 0))
+(defn warn-new-subscription! []
+  (let [new-count (swap! subscription-count inc)]
+    (when (zero? (mod new-count 10))
+      (log/info (format "%d new subscriptions" new-count)))))
+
 (defn subscribe-to-mailgun [email]
   (log/info "Attempting to subscribe email:" email)
 
@@ -600,6 +603,7 @@
 
       (< (:status response) 300)
       (do
+        (warn-new-subscription!)
         (log/info "Successfully subscribed email:" email)
         {:success true})
 
