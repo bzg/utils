@@ -37,48 +37,48 @@
          '[clojure.edn :as edn]
          '[babashka.cli :as cli])
 
-;; Define CLI spec
 (def cli-options
-  {:help   {:alias :h
-            :desc  "          Display this help message"
-            :type  :boolean}
-   :config {:alias :c
-            :desc  "  Path to configuration file"
-            :ref   "<file>"}
-   :port   {:alias   :p
-            :desc    "  Port number to run the server on"
-            :ref     "<port>"
-            :default 8080
-            :coerce  :int}
-   :list   {:alias :l
-            :desc  "  Mailgun list identifier"
-            :ref   "<email>"}})
+  {:help      {:alias :h
+               :desc  "             Display this help message"
+               :type  :boolean}
+   :config    {:alias :c
+               :desc  "     Path to configuration file"
+               :ref   "<file>"}
+   :port      {:alias   :p
+               :desc    "       Port number to run the server on"
+               :ref     "<port>"
+               :default 8080
+               :coerce  :int}
+   :list      {:alias :l
+               :desc  "      Mailgun list identifier"
+               :ref   "<email>"}
+   :base-path {:alias :b
+               :desc  "  Base path for deployments in subdirectories"
+               :ref   "<path>"}})
 
-;; Function to print usage information
 (defn print-usage []
   (println "Usage: subscribe [options]")
   (println "\nOptions:")
   (doseq [[k v] cli-options]
-    (println (format "  --%s, -%s %s\t%s"
+    (println (format "  --%s, -%s %s %s"
                      (name k)
-                     (:alias v)
+                     (name (:alias v))
                      (or (:ref v) "")
                      (:desc v))))
   (println "\nEnvironment variables:")
-  (println "  MAILGUN_LIST_ID         Mailgun list identifier (if not provided with -l)")
-  (println "  MAILGUN_API_ENDPOINT    Mailgun API endpoint")
-  (println "  MAILGUN_API_KEY         Mailgun API key")
-  (println "  SUBSCRIBE_BASE_PATH     Base path for deployments in subdirectories")
+  (println "  MAILGUN_LIST_ID          Mailgun list identifier (if not provided with -l)")
+  (println "  MAILGUN_API_ENDPOINT     Mailgun API endpoint")
+  (println "  MAILGUN_API_KEY          Mailgun API key")
+  (println "  SUBSCRIBE_BASE_PATH      Base path for deployments in subdirectories")
   (println "\nExamples:")
-  (println "  subscribe               # Run on default port 8080")
-  (println "  subscribe -p 4444       # Run on port 4444")
-  (println "  subscribe -c config.edn # Load configuration from file")
-  (println "  subscribe -l my@list.fr # Specify list ID directly"))
+  (println "  subscribe                # Run on default port 8080")
+  (println "  subscribe -p 4444        # Run on port 4444")
+  (println "  subscribe -c config.edn  # Load configuration from file")
+  (println "  subscribe -l my@list.com # Specify list ID directly")
+  (println "  subscribe -b /app        # Set base path to /app"))
 
-;; Default language setting
+;; Defaults
 (def default-language :en)
-
-;; Default logging level
 (def log-min-level :info)
 
 ;; Configure Timbre logging
@@ -965,7 +965,6 @@
                        (with-out-str (.printStackTrace e))
                        "</pre>")}))))
 
-;; Start server
 (defn start-server [& [port]]
   (let [port (or port 8080)]
     (log/info (str "Starting server on http://localhost:" port))
@@ -977,7 +976,8 @@
   (let [opts        (cli/parse-opts *command-line-args* {:spec cli-options})
         port        (get opts :port 8080)
         config-path (:config opts)
-        list        (:list opts)]
+        list        (:list opts)
+        path        (:base-path opts)]
     ;; Handle help option
     (when (:help opts)
       (print-usage)
@@ -986,6 +986,10 @@
     (when list
       (alter-var-root #'mailgun-list-id (constantly list))
       (log/info "Setting mailgun-list-id from command line:" list))
+    ;; Set base-path from command line if provided
+    (when path
+      (alter-var-root #'base-path (constantly path))
+      (log/info "Setting base-path from command line:" path))
     ;; Process configuration file if provided
     (when config-path (process-config-file config-path))
     ;; Start the server
