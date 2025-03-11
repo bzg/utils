@@ -20,11 +20,15 @@ The scripts are written in [[https://clojure.org][Clojure]] with [[https://babas
 
 This should take care of installing all you need:
 
-: ~$ brew install babashka/brew/bbin
+#+begin_src sh
+brew install babashka/brew/bbin
+#+end_src
 
 Once =bbin= is installed in your environment, run this in a terminal:
 
-- =bbin install https://raw.githubusercontent.com/bzg/utils/refs/heads/main/src/subscribe.clj=
+#+begin_src sh
+bbin install https://raw.githubusercontent.com/bzg/utils/refs/heads/main/src/subscribe.clj
+#+end_src
 
 * Support the Clojure(script) ecosystem
 
