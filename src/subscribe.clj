@@ -127,15 +127,15 @@
            "")
          (str/join "/" segments))))
 
-;; Centralized Mailgun Authentication Helper
-(defn get-mailgun-auth-header
-  "Returns the Authorization header value for Mailgun API requests"
-  []
-  (let [auth-string  (str "api:" mailgun-api-key)
-        auth-bytes   (.getBytes auth-string)
-        encoder      (java.util.Base64/getEncoder)
-        encoded-auth (.encodeToString encoder auth-bytes)]
-    (str "Basic " encoded-auth)))
+;; Returns the Authorization header value for Mailgun API requests
+(def get-mailgun-auth-header
+  (memoize
+   (fn []
+     (let [auth-string  (str "api:" mailgun-api-key)
+           auth-bytes   (.getBytes auth-string)
+           encoder      (java.util.Base64/getEncoder)
+           encoded-auth (.encodeToString encoder auth-bytes)]
+       (str "Basic " encoded-auth)))))
 
 ;; Centralized URL construction functions
 (defn get-mailgun-member-url
@@ -712,7 +712,7 @@
         strings    (get-strings lang)
         csrf-token (generate-csrf-token)]
     {:status  200
-     :headers {"Content-Type" "text/html"
+     :headers {"Content-Type" "text/html; charset=UTF-8"
                "Set-Cookie"   (format "csrf_token=%s; Path=%s; HttpOnly; SameSite=Strict"
                                       csrf-token
                                       (if (str/blank? base-path) "/" base-path))}
@@ -793,7 +793,7 @@
           (log/warn "Form token:" form-csrf-token)
           (log/warn "Cookie token:" cookie-csrf-token)
           {:status  403
-           :headers {"Content-Type" "text/html"}
+           :headers {"Content-Type" "text/html; charset=UTF-8"}
            :body    (csrf-invalid-result strings)})
 
         ;; Anti-spam: rate limiting
@@ -801,7 +801,7 @@
           (do
             (log/warn "Rate limit exceeded for IP:" client-ip)
             {:status  429
-             :headers {"Content-Type" "text/html"
+             :headers {"Content-Type" "text/html; charset=UTF-8"
                        "Retry-After"  "3600"}
              :body    (rate-limit-result strings)})
 
@@ -810,7 +810,7 @@
             (do
               (log/warn "Spam detected: honeypot field filled from IP:" client-ip)
               {:status  400
-               :headers {"Content-Type" "text/html"}
+               :headers {"Content-Type" "text/html; charset=UTF-8"}
                :body    (spam-detected-result strings)})
 
             ;; Email validation
@@ -820,7 +820,7 @@
                 (log/error "No email provided in request")
                 (log/error "Form data:" (pr-str form-data))
                 {:status  400
-                 :headers {"Content-Type" "text/html"}
+                 :headers {"Content-Type" "text/html; charset=UTF-8"}
                  :body    (error-result
                            strings
                            (get-in strings [:messages :no-email])
@@ -833,7 +833,7 @@
               (do
                 (log/error "Invalid email format:" email)
                 {:status  400
-                 :headers {"Content-Type" "text/html"}
+                 :headers {"Content-Type" "text/html; charset=UTF-8"}
                  :body    (invalid-email-result strings email)})
 
               ;; Valid request, proceed with normal handling
@@ -844,17 +844,17 @@
                   (do
                     (log/info "Email already subscribed:" email)
                     {:status  200
-                     :headers {"Content-Type" "text/html"}
+                     :headers {"Content-Type" "text/html; charset=UTF-8"}
                      :body    (already-subscribed-result strings email)})
 
                   ;; If not subscribed, proceed with subscription
                   (let [result (subscribe-to-mailgun email)]
                     (if (:success result)
                       {:status  200
-                       :headers {"Content-Type" "text/html"}
+                       :headers {"Content-Type" "text/html; charset=UTF-8"}
                        :body    (success-result strings email)}
                       {:status  400
-                       :headers {"Content-Type" "text/html"}
+                       :headers {"Content-Type" "text/html; charset=UTF-8"}
                        :body    (error-result
                                  strings
                                  (or (:message result) (get-in strings [:messages :server-error]))
@@ -865,21 +865,21 @@
                   (do
                     (log/info "Email not subscribed, can't unsubscribe:" email)
                     {:status  200 ; Changed from 404 to 200 for better user experience
-                     :headers {"Content-Type" "text/html"}
+                     :headers {"Content-Type" "text/html; charset=UTF-8"}
                      :body    (not-subscribed-result strings email)})
 
                   ;; If subscribed, proceed with unsubscription
                   (let [result (unsubscribe-from-mailgun email)]
                     (if (:success result)
                       {:status  200
-                       :headers {"Content-Type" "text/html"}
+                       :headers {"Content-Type" "text/html; charset=UTF-8"}
                        :body    (unsubscribed-result strings email)}
                       (if (:not_found result)
                         {:status  200 ; Changed from 404 to 200 for better user experience
-                         :headers {"Content-Type" "text/html"}
+                         :headers {"Content-Type" "text/html; charset=UTF-8"}
                          :body    (not-subscribed-result strings email)}
                         {:status  400
-                         :headers {"Content-Type" "text/html"}
+                         :headers {"Content-Type" "text/html; charset=UTF-8"}
                          :body    (error-result
                                    strings
                                    (or (:message result) (get-in strings [:messages :server-error]))
@@ -889,7 +889,7 @@
                 (do
                   (log/error "Unknown action requested:" action)
                   {:status  400
-                   :headers {"Content-Type" "text/html"}
+                   :headers {"Content-Type" "text/html; charset=UTF-8"}
                    :body    (error-result
                              strings
                              (get-in strings [:messages :unknown-action])
@@ -901,7 +901,7 @@
       (let [lang    (determine-language req)
             strings (get-strings lang)]
         {:status  500
-         :headers {"Content-Type" "text/html"}
+         :headers {"Content-Type" "text/html; charset=UTF-8"}
          :body    (error-result
                    strings
                    (get-in strings [:messages :server-error])
@@ -926,7 +926,7 @@
                                  :max-requests  max-requests-per-window
                                  :current-log   (count @ip-request-log)}}]
     {:status  200
-     :headers {"Content-Type" "application/json"}
+     :headers {"Content-Type" "application/json; charset=UTF-8"}
      :body    (json/generate-string debug-info {:pretty true})}))
 
 ;; Main app with routes
@@ -945,7 +945,7 @@
         (do
           (log/info "Not found:" (:request-method req) uri)
           {:status  404
-           :headers {"Content-Type" "text/html"}
+           :headers {"Content-Type" "text/html; charset=UTF-8"}
            :body    (format "<h1>%s</h1><p>%s: %s %s</p>"
                             "Not Found"
                             "Resource not found"
@@ -955,7 +955,7 @@
         (log/error "Uncaught exception in request handler:" (str e))
         (log/error "Stack trace:" (with-out-str (.printStackTrace e)))
         {:status  500
-         :headers {"Content-Type" "text/html"}
+         :headers {"Content-Type" "text/html; charset=UTF-8"}
          :body    (str "<h1>Internal Server Error</h1><pre>"
                        (.getMessage e) "\n\n"
                        (with-out-str (.printStackTrace e))
