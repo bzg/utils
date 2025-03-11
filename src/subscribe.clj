@@ -1,33 +1,32 @@
 #!/usr/bin/env bb
 
-;; This script runs a web application to let users subscribe to a
-;; Mailgun mailing list.
-;;
-;; You need a Mailgun API endpoint, key and the list identifier.
+;; This script runs a web app to let users subscribe to a Mailgun
+;; mailing list. You need a Mailgun API endpoint, key and the list
+;; identifier.
 ;;
 ;; You can store these values in environment variables:
-;;
 ;; MAILGUN_LIST_ID (example: "my@list.com")
 ;; MAILGUN_API_ENDPOINT (example "https://api.eu.mailgun.net/v3")
 ;; MAILGUN_API_KEY (example "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
-;; SUBSCRIBE_BASE_PATH (optional, example: "/app" - for subdirectory deployments)
 ;;
 ;; By default, the web application runs as http://localhost:8080:
-;;
 ;; ~$ subscribe
 ;;
-;; You can use a EDN configuration file:
+;; You can also set a base path (e.g. "http://localhost:8080/newsletter") with
+;; SUBSCRIBE_BASE_PATH
 ;;
+;; You can use a EDN configuration file for setting more options:
 ;; ~$ subscribe --config config.edn
 ;;
-;; This config file contains a map which allow to override these variables:
-;; - :default-language
-;; - :ui-strings
-;; - :log-min-level
-;; - :mailgun-api-endpoint
-;; - :mailgun-list-id
+;; This configuration file can let you override these variables:
+;; - default-language
+;; - ui-strings
+;; - log-min-level
+;; - mailgun-api-endpoint
+;; - mailgun-list-id
+;; - base-path
 ;;
-;; Use -h for help information.
+;; Use -h for more information.
 
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
@@ -186,8 +185,7 @@
 ;; Extract CSRF token from cookies
 (defn extract-csrf-from-cookie [cookies]
   (when-let [cookie-str cookies]
-    (some->> (re-find #"csrf_token=([^;]+)" cookie-str)
-             second)))
+    (some->> (re-find #"csrf_token=([^;]+)" cookie-str) second)))
 
 ;; UI Strings with internationalization (i18n) support
 (def ui-strings
@@ -290,6 +288,8 @@
       (log-false "Invalid configuration: mailgun-api-endpoint should be a string")
       (and-not :mailgun-api-key string?)
       (log-false "Invalid configuration: mailgun-api-key should be a string")
+      (and-not :base-path string?)
+      (log-false "Invalid configuration: base-path should be a string")
       :else true)))
 
 (defn apply-config-overrides! [config-data]
@@ -297,28 +297,29 @@
   (when-let [lang (:default-language config-data)]
     (alter-var-root #'default-language (constantly lang))
     (log/info "Overriding default-language from config:" lang))
-
   ;; Override log-min-level if specified
   (when-let [level (:log-min-level config-data)]
     (alter-var-root #'log-min-level (constantly level))
     ;; Update logging configuration with new level
     (log/merge-config! {:min-level level})
     (log/info "Overriding log-min-level from config:" level))
-
   ;; Override mailgun-list-id if specified
   (when-let [list (:mailgun-list-id config-data)]
     (alter-var-root #'mailgun-list-id (constantly list))
     (log/info "Overriding mailgun-list-id from config:" list))
-
   ;; Override mailgun-api-endpoint if specified
   (when-let [endpoint (:mailgun-api-endpoint config-data)]
     (alter-var-root #'mailgun-api-endpoint (constantly endpoint))
     (log/info "Overriding mailgun-api-endpoint from config:" endpoint))
-
   ;; Override mailgun-api-key if specified
   (when-let [key (:mailgun-api-key config-data)]
     (alter-var-root #'mailgun-api-key (constantly key))
-    (log/info "Overriding mailgun-api-key from config:" "****")))
+    (log/info "Overriding mailgun-api-key from config:" "****"))
+  (when-let [path (:base-path config-data)]
+    (alter-var-root #'base-path (constantly (if (str/ends-with? path "/")
+                                              (str/replace path #"/$" "")
+                                              path)))
+    (log/info "Overriding base-path from config:" path)))
 
 ;; Function to merge UI strings from configuration with defaults
 ;; This gives precedence to config file values
@@ -664,7 +665,6 @@
 
 (defn subscribe-to-mailgun [email]
   (log/info "Attempting to subscribe email:" email)
-
   (let [url         (get-mailgun-members-url)
         body-params (format "address=%s&subscribed=yes&upsert=yes"
                             (java.net.URLEncoder/encode email "UTF-8"))
@@ -726,7 +726,6 @@
       (try
         (let [body (slurp body-stream)]
           (log/debug "Raw body content:" body)
-
           ;; Parse the body in the most robust way possible
           (let [result (reduce (fn [acc pair]
                                  (if-let [[_ k v] (re-matches #"([^=]+)=(.*)" pair)]
@@ -742,7 +741,6 @@
             result))
         (catch Throwable t (log/error "Error reading body:" (str t)) {}))
       (do (log/debug "No body in request") {}))
-
     (catch Throwable t
       (log/error "Top-level error in parse-form-data:" (str t))
       (log/error "Stack trace:" (with-out-str (.printStackTrace t)))
@@ -770,7 +768,6 @@
   (log/info "Received subscription request")
   (log/debug "Request method:" (:request-method req))
   (log/debug "Headers:" (pr-str (:headers req)))
-
   (try
     (let [form-data         (parse-form-data req)
           email             (-> (:email form-data) str/trim str/lower-case)
@@ -941,7 +938,6 @@
     (try
       (log/debug "Processing request:" (:request-method req) uri)
       (log/debug "Normalized path:" normalized-uri)
-
       (case [(:request-method req) normalized-uri]
         [:get "/"]           (handle-index req-with-params)
         [:post "/subscribe"] (handle-subscribe req-with-params)
@@ -993,8 +989,8 @@
     ;; Process configuration file if provided
     (when config-path (process-config-file config-path))
     ;; Start the server
-    (do (log/info (str "Starting server on http://localhost:" port))
-        (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
-        (server/run-server app {:port port})
-        ;; Keep the server running
-        @(promise))))
+    (log/info (str "Starting server on http://localhost:" port))
+    (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
+    (server/run-server app {:port port})
+    ;; Keep the server running
+    @(promise)))
