@@ -12,31 +12,68 @@
 ;; MAILGUN_API_KEY (example "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
 ;; SUBSCRIBE_BASE_PATH (optional, example: "/app" - for subdirectory deployments)
 ;;
-;; Running the web application as http://localhost:8080:
+;; By default, the web application runs as http://localhost:8080:
 ;;
 ;; ~$ subscribe
 ;;
-;; Running it on another port (e.g. http://localhost:4444):
-;;
-;; ~$ subscribe 4444
-;;
-;; Reading a config.edn file:
+;; You can use a EDN configuration file:
 ;;
 ;; ~$ subscribe --config config.edn
 ;;
-;; The config file can override these variables:
-;; - default-language
-;; - ui-strings
-;; - log-min-level
-;; - mailgun-api-endpoint
-;; - mailgun-list-id
+;; This config file contains a map which allow to override these variables:
+;; - :default-language
+;; - :ui-strings
+;; - :log-min-level
+;; - :mailgun-api-endpoint
+;; - :mailgun-list-id
+;;
+;; Use -h for help information.
 
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
          '[clojure.string :as str]
          '[cheshire.core :as json]
          '[taoensso.timbre :as log]
-         '[clojure.edn :as edn])
+         '[clojure.edn :as edn]
+         '[babashka.cli :as cli])
+
+;; Define CLI spec
+(def cli-options
+  {:help   {:alias :h
+            :desc  "          Display this help message"
+            :type  :boolean}
+   :config {:alias :c
+            :desc  "  Path to configuration file"
+            :ref   "<file>"}
+   :port   {:alias   :p
+            :desc    "  Port number to run the server on"
+            :ref     "<port>"
+            :default 8080
+            :coerce  :int}
+   :list   {:alias :l
+            :desc  "  Mailgun list identifier"
+            :ref   "<email>"}})
+
+;; Function to print usage information
+(defn print-usage []
+  (println "Usage: subscribe [options]")
+  (println "\nOptions:")
+  (doseq [[k v] cli-options]
+    (println (format "  --%s, -%s %s\t%s"
+                     (name k)
+                     (:alias v)
+                     (or (:ref v) "")
+                     (:desc v))))
+  (println "\nEnvironment variables:")
+  (println "  MAILGUN_LIST_ID         Mailgun list identifier (if not provided with -l)")
+  (println "  MAILGUN_API_ENDPOINT    Mailgun API endpoint")
+  (println "  MAILGUN_API_KEY         Mailgun API key")
+  (println "  SUBSCRIBE_BASE_PATH     Base path for deployments in subdirectories")
+  (println "\nExamples:")
+  (println "  subscribe               # Run on default port 8080")
+  (println "  subscribe -p 4444       # Run on port 4444")
+  (println "  subscribe -c config.edn # Load configuration from file")
+  (println "  subscribe -l my@list.fr # Specify list ID directly"))
 
 ;; Default language setting
 (def default-language :en)
@@ -258,29 +295,29 @@
 (defn apply-config-overrides! [config-data]
   ;; Override default-language if specified
   (when-let [lang (:default-language config-data)]
-    (alter-var-root #'default-language lang)
+    (alter-var-root #'default-language (constantly lang))
     (log/info "Overriding default-language from config:" lang))
 
   ;; Override log-min-level if specified
   (when-let [level (:log-min-level config-data)]
-    (alter-var-root #'log-min-level level)
+    (alter-var-root #'log-min-level (constantly level))
     ;; Update logging configuration with new level
     (log/merge-config! {:min-level level})
     (log/info "Overriding log-min-level from config:" level))
 
   ;; Override mailgun-list-id if specified
-  (when-let [list-id (:mailgun-list-id config-data)]
-    (alter-var-root #'mailgun-list-id list-id)
-    (log/info "Overriding mailgun-list-id from config:" list-id))
+  (when-let [list (:mailgun-list-id config-data)]
+    (alter-var-root #'mailgun-list-id (constantly list))
+    (log/info "Overriding mailgun-list-id from config:" list))
 
   ;; Override mailgun-api-endpoint if specified
   (when-let [endpoint (:mailgun-api-endpoint config-data)]
-    (alter-var-root #'mailgun-api-endpoint endpoint)
+    (alter-var-root #'mailgun-api-endpoint (constantly endpoint))
     (log/info "Overriding mailgun-api-endpoint from config:" endpoint))
 
   ;; Override mailgun-api-key if specified
   (when-let [key (:mailgun-api-key config-data)]
-    (alter-var-root #'mailgun-api-key key)
+    (alter-var-root #'mailgun-api-key (constantly key))
     (log/info "Overriding mailgun-api-key from config:" "****")))
 
 ;; Function to merge UI strings from configuration with defaults
@@ -937,24 +974,23 @@
 
 ;; Main entry point
 (when (= *file* (System/getProperty "babashka.file"))
-  (let [args        *command-line-args*
-        ;; Check if first argument is a valid port number
-        port        (if (and (seq args)
-                             (try (Integer/parseInt (first args)) true
-                                  (catch NumberFormatException _ false)))
-                      (Integer/parseInt (first args))
-                      8080)
-        config-path (extract-config-path args)]
-
+  (let [opts        (cli/parse-opts *command-line-args* {:spec cli-options})
+        port        (get opts :port 8080)
+        config-path (:config opts)
+        list        (:list opts)]
+    ;; Handle help option
+    (when (:help opts)
+      (print-usage)
+      (System/exit 0))
+    ;; Set list from command line if provided
+    (when list
+      (alter-var-root #'mailgun-list-id (constantly list))
+      (log/info "Setting mailgun-list-id from command line:" list))
     ;; Process configuration file if provided
     (when config-path (process-config-file config-path))
-
-    (if-not (and mailgun-list-id
-                 mailgun-api-endpoint
-                 mailgun-api-key)
-      (log/error "Missing environment variable")
-      (do (log/info (str "Starting server on http://localhost:" port))
-          (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
-          (server/run-server app {:port port})
-          ;; Keep the server running
-          @(promise)))))
+    ;; Start the server
+    (do (log/info (str "Starting server on http://localhost:" port))
+        (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
+        (server/run-server app {:port port})
+        ;; Keep the server running
+        @(promise))))
