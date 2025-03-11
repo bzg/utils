@@ -1,31 +1,35 @@
 #!/usr/bin/env bb
 
-;; This script runs a small web application to let users subscribe to
-;; a Mailgun mailing list.
+;; This script runs a web application to let users subscribe to a
+;; Mailgun mailing list.
 ;;
-;; You will need a Mailgun API endpoint, key and the list identifier.
+;; You need a Mailgun API endpoint, key and the list identifier.
 ;;
-;; Store them in environment variables:
+;; You can store these values in environment variables:
 ;;
 ;; MAILGUN_LIST_ID (example: "my@list.com")
 ;; MAILGUN_API_ENDPOINT (example "https://api.eu.mailgun.net/v3")
 ;; MAILGUN_API_KEY (example "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
 ;; SUBSCRIBE_BASE_PATH (optional, example: "/app" - for subdirectory deployments)
 ;;
-;; Running the web application as http://localhost:8080
+;; Running the web application as http://localhost:8080:
 ;;
 ;; ~$ subscribe
 ;;
-;; Running it on another port (e.g. http://localhost:4444)
+;; Running it on another port (e.g. http://localhost:4444):
 ;;
 ;; ~$ subscribe 4444
 ;;
-;; Reading UI strings from a config.edn file:
+;; Reading a config.edn file:
 ;;
 ;; ~$ subscribe --config config.edn
 ;;
-;; See the default value of ui-strings below to see what UI strings
-;; you can configure.
+;; The config file can override these variables:
+;; - default-language
+;; - ui-strings
+;; - log-min-level
+;; - mailgun-api-endpoint
+;; - mailgun-list-id
 
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
@@ -57,7 +61,7 @@
       (log/error "Missing MAILGUN_LIST_ID")))
 (def mailgun-api-endpoint
   (or (System/getenv "MAILGUN_API_ENDPOINT")
-      (log/error "Missing MAILGUN_API_ENDPOINT")))
+      "https://api.mailgun.net/v3"))
 (def mailgun-api-key
   (or (System/getenv "MAILGUN_API_KEY")
       (log/error "Missing MAILGUN_API_KEY")))
@@ -231,15 +235,53 @@
 
 ;; Function to validate the configuration data
 (defn validate-config [config-data]
-  (cond
-    (not (map? config-data))
-    (do (log/error "Invalid configuration: expected a map")
-        false)
-    (and (:ui-strings config-data)
-         (not (map? (:ui-strings config-data))))
-    (do (log/error "Invalid configuration: ui-strings should be a map")
-        false)
-    :else true))
+  (let [and-not   #(when-let [r (get config-data %1)] (not (apply %2 [r])))
+        log-false #(do (log/error %) false)]
+    (cond
+      (not (map? config-data))
+      (log-false "Invalid configuration: expected a map")
+      ;; (when-let [r (get config-data :ui-strings)] (not (apply map? [r])))
+      (and-not :ui-strings map?)
+      (log-false "Invalid configuration: ui-strings should be a map")
+      (and-not :default-language keyword?)
+      (log-false "Invalid configuration: default-language should be a keyword")
+      (and-not :log-min-level keyword?)
+      (log-false "Invalid configuration: log-min-level should be a keyword")
+      (and-not :mailgun-list-id string?)
+      (log-false "Invalid configuration: mailgun-list-id should be a string")
+      (and-not :mailgun-api-endpoint string?)
+      (log-false "Invalid configuration: mailgun-api-endpoint should be a string")
+      (and-not :mailgun-api-key string?)
+      (log-false "Invalid configuration: mailgun-api-key should be a string")
+      :else true)))
+
+(defn apply-config-overrides! [config-data]
+  ;; Override default-language if specified
+  (when-let [lang (:default-language config-data)]
+    (alter-var-root #'default-language lang)
+    (log/info "Overriding default-language from config:" lang))
+
+  ;; Override log-min-level if specified
+  (when-let [level (:log-min-level config-data)]
+    (alter-var-root #'log-min-level level)
+    ;; Update logging configuration with new level
+    (log/merge-config! {:min-level level})
+    (log/info "Overriding log-min-level from config:" level))
+
+  ;; Override mailgun-list-id if specified
+  (when-let [list-id (:mailgun-list-id config-data)]
+    (alter-var-root #'mailgun-list-id list-id)
+    (log/info "Overriding mailgun-list-id from config:" list-id))
+
+  ;; Override mailgun-api-endpoint if specified
+  (when-let [endpoint (:mailgun-api-endpoint config-data)]
+    (alter-var-root #'mailgun-api-endpoint endpoint)
+    (log/info "Overriding mailgun-api-endpoint from config:" endpoint))
+
+  ;; Override mailgun-api-key if specified
+  (when-let [key (:mailgun-api-key config-data)]
+    (alter-var-root #'mailgun-api-key key)
+    (log/info "Overriding mailgun-api-key from config:" "****")))
 
 ;; Function to merge UI strings from configuration with defaults
 ;; This gives precedence to config file values
@@ -255,13 +297,14 @@
       (log/info "Merged UI strings from configuration file"))
     (log/info "No UI strings found in configuration file")))
 
-;; Process configuration file
 (defn process-config-file [file-path]
   (when file-path
     (log/info "Using configuration file:" file-path)
     (let [config-data (read-config-file file-path)]
       (when (validate-config config-data)
-        (merge-ui-strings! config-data)))))
+        ;; Apply both UI string merging and variable overrides
+        (merge-ui-strings! config-data)
+        (apply-config-overrides! config-data)))))
 
 ;; Extract the config path from command-line arguments
 (defn extract-config-path [args]
@@ -904,8 +947,7 @@
         config-path (extract-config-path args)]
 
     ;; Process configuration file if provided
-    (when config-path
-      (process-config-file config-path))
+    (when config-path (process-config-file config-path))
 
     (if-not (and mailgun-list-id
                  mailgun-api-endpoint
