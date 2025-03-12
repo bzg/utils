@@ -444,6 +444,11 @@
          :body    (pico-page-layout
                    "Accueil" (home-content topics-data))}
 
+        [:get "/robots.txt"]
+        {:status  200
+         :headers {"Content-Type" "text/plain"}
+         :body    "User-agent: *\nAllow: /\n"}
+
         [:get "/category"]
         (let [category-name   (:name params)
               category-topics (get-topics-by-category category-name topics-data)]
