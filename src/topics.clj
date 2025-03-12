@@ -48,7 +48,7 @@
                :default "A few topics to explore"}
    :footer    {:desc    "Footer text"
                :alias   :F
-               :default "Topics - https://github.com/bzg/utils"}
+               :default "https://github.com/bzg/utils"}
    :base-path {:desc    "Base path for subdirectory deployment (e.g., /topics)"
                :alias   :b
                :default ""}
@@ -56,17 +56,13 @@
                :alias  :h
                :coerce :boolean}
    :log-level {:alias   :l
-               :desc    "    Set log level (debug, info, warn, error)"
+               :desc    "Set log level (debug, info, warn, error)"
                :ref     "<level>"
                :default :info}})
 
-;; Initialize settings - will be populated from CLI options
-(def settings {})
-
 ;; Function to append base path to URLs
-(defn with-base-path [path]
-  (let [base-path  (:base-path settings)
-        clean-base (if (str/ends-with? base-path "/")
+(defn with-base-path [path base-path]
+  (let [clean-base (if (str/ends-with? base-path "/")
                      (subs base-path 0 (dec (count base-path)))
                      base-path)]
     (str clean-base path)))
@@ -170,17 +166,17 @@
   (filter #(= (last (:path %)) category) topics-data))
 
 ;; Pico.css HTML Templates
-(defn pico-page-layout [page-title content]
+(defn pico-page-layout [page-title content title tagline footer source base-path]
   (str "<!DOCTYPE html>
 <html lang=\"fr\" data-theme=\"light\">
 <head>
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-  <title>" page-title " - " (:title settings) "</title>
+  <title>" page-title " - " title "</title>
 
   <!-- Pico.css 2.0 -->
   <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css\">
-  
+
   <style>
   /* Custom styles */
   .container {
@@ -188,25 +184,25 @@
       margin: 0 auto;
       padding: 0 1rem;
   }
-  
+
   header.site-header {
       padding: 1rem 0;
       background-color: #f8f9fa;
       margin-bottom: 2rem;
   }
-  
+
   footer {
       margin-top: 3rem;
       padding: 2rem 0;
       background-color: #f8f9fa;
   }
-  
+
   .category-card {
       height: 100%;
       display: flex;
       flex-direction: column;
   }
-  
+
   .category-card > a {
       flex-grow: 1;
       display: flex;
@@ -219,71 +215,71 @@
       background-color: white;
       transition: transform 0.2s, box-shadow 0.2s;
   }
-  
+
   .category-card > a:hover {
       transform: translateY(-5px);
       box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
   }
-  
+
   .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 2rem;
   }
-  
+
   details {
       margin-bottom: 1rem;
       border: 1px solid #dee2e6;
       border-radius: 0.5rem;
       padding: 1rem;
   }
-  
+
   details summary {
       cursor: pointer;
       font-weight: bold;
       padding: 0.5rem 0;
   }
-  
+
   details[open] summary {
       margin-bottom: 1rem;
   }
-  
+
   .back-link {
       display: inline-flex;
       align-items: center;
       margin-bottom: 1rem;
   }
-  
+
   .back-link::before {
       content: '←';
       margin-right: 0.5rem;
   }
-  
+
   .search-form {
       margin-bottom: 3rem;
   }
-  
+
   .search-container {
       display: flex;
       gap: 0.5rem;
   }
-  
+
   .search-container input[type=\"search\"] {
       flex-grow: 1;
   }
-  
+
   .alert {
       padding:       1rem;
       border-radius: 0.5rem;
       margin-bottom: 1rem;
   }
-  
+
   .alert-info {
       background-color: #e7f5ff;
       border:           1px solid #a5d8ff;
       color:            #1971c2;
   }
-  
+
   .alert-error {
       background-color: #ffe3e3;
       border:           1px solid #ffa8a8;
@@ -295,8 +291,8 @@
   <header class=\"site-header\">
   <div class=\"container\">
   <div>
-  <h1><a href=\"" (with-base-path "/") "\">" (:title settings) "</a></h1>
-  <p>" (:tagline settings) "</p>
+  <h1><a href=\"" (with-base-path "/" base-path) "\">" title "</a></h1>
+  <p>" tagline "</p>
   </div>
   </div>
   </header>
@@ -307,8 +303,8 @@
 
   <footer>
   <div class=\"container\">
-  <p>" (:footer settings) "</p>
-  <p>Voir <a target=\"new\" href=\"" (:source settings) "\">la source des questions et réponses</a></p>
+  <p>" footer "</p>
+  <p>Voir <a target=\"new\" href=\"" source "\">la source des questions et réponses</a></p>
   </div>
   </footer>
 
@@ -321,9 +317,9 @@
   </body>
   </html>"))
 
-(defn home-content [topics-data]
+(defn home-content [topics-data base-path]
   (str "<div>
-  <form action=\"" (with-base-path "/search") "\" method=\"get\" class=\"search-form\" role=\"search\">
+  <form action=\"" (with-base-path "/search" base-path) "\" method=\"get\" class=\"search-form\" role=\"search\">
   <input placeholder=\"Rechercher dans les sujets...\" type=\"search\" id=\"search-input\" name=\"q\">
   <button type=\"submit\">Rechercher</button>
   </form>
@@ -331,7 +327,7 @@
        (str/join "\n"
                  (for [category (get-categories topics-data)]
                    (str "<div class=\"category-card\">
-  <a href=\"" (with-base-path "/category") "?name=" (safe-url-encode category) "\">
+  <a href=\"" (with-base-path "/category" base-path) "?name=" (safe-url-encode category) "\">
   <h3>" category "</h3>
   <p>" (count (get-topics-by-category category topics-data)) " questions</p>
   </a>
@@ -339,9 +335,9 @@
        "</div>
   </div>"))
 
-(defn category-content [category-name category-topics]
+(defn category-content [category-name category-topics base-path]
   (str "<div>
-  <a href=\"" (with-base-path "/") "\" class=\"back-link\">Retour à l'accueil</a>
+  <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
   <h2>" category-name "</h2>
 
   <div>"
@@ -354,9 +350,9 @@
        "</div>
   </div>"))
 
-(defn search-content [query results]
+(defn search-content [query results base-path]
   (str "<div>
-  <a href=\"" (with-base-path "/") "\" class=\"back-link\">Retour à l'accueil</a>
+  <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
   <h2>Résultats de recherche</h2>
   <p>Résultats pour \"" query "\" (" (count results) ") :</p>
 
@@ -377,7 +373,7 @@
        "</div>
   </div>"))
 
-(defn topics-content [item]
+(defn topics-content [item base-path]
   (str "<div>
   <a href=\"javascript:history.back()\" class=\"back-link\">Retour</a>
   <article>
@@ -386,14 +382,14 @@
   " (:content item) "
   </div>
   <p>
-  Catégorie : <a href=\"" (with-base-path "/category") "?name=" (safe-url-encode (last (:path item))) "\">" (last (:path item)) "</a>
+  Catégorie : <a href=\"" (with-base-path "/category" base-path) "?name=" (safe-url-encode (last (:path item))) "\">" (last (:path item)) "</a>
   </p>
   </article>
   </div>"))
 
-(defn not-found-content []
+(defn not-found-content [base-path]
   (str "<div>
-  <a href=\"" (with-base-path "/") "\" class=\"back-link\">Retour à l'accueil</a>
+  <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
   <h2>Contenu introuvable</h2>
   <div class=\"alert alert-error\">
   <h3>L'article demandé n'existe pas</h3>
@@ -401,9 +397,9 @@
   </div>
   </div>"))
 
-(defn error-content []
+(defn error-content [base-path]
   (str "<div>
-  <a href=\"" (with-base-path "/") "\" class=\"back-link\">Retour à l'accueil</a>
+  <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
   <h2>Page non trouvée</h2>
   <div class=\"alert alert-error\">
   <h3>La page demandée n'existe pas</h3>
@@ -412,9 +408,8 @@
   </div>"))
 
 ;; Function to extract path without base path
-(defn strip-base-path [uri]
-  (let [base-path (:base-path settings)
-        base-len  (count base-path)]
+(defn strip-base-path [uri base-path]
+  (let [base-len (count base-path)]
     (if (and (seq base-path)
              (str/starts-with? uri base-path))
       (let [path (subs uri base-len)]
@@ -436,10 +431,10 @@
         (log/error "Error parsing query string:" (.getMessage e))
         {}))))
 
-;; Create app function with topics-data as parameter
-(defn create-app [topics-data]
+;; Create app function with topics-data and settings as parameters
+(defn create-app [topics-data settings]
   (fn [{:keys [request-method uri query-string]}]
-    (let [path   (strip-base-path uri)
+    (let [path   (strip-base-path uri (:base-path settings))
           params (parse-query-string query-string)]
 
       (case [request-method path]
@@ -447,7 +442,13 @@
         {:status  200
          :headers {"Content-Type" "text/html; charset=utf-8"}
          :body    (pico-page-layout
-                   "Accueil" (home-content topics-data))}
+                   "Accueil"
+                   (home-content topics-data (:base-path settings))
+                   (:title settings)
+                   (:tagline settings)
+                   (:footer settings)
+                   (:source settings)
+                   (:base-path settings))}
 
         [:get "/robots.txt"]
         {:status  200
@@ -461,7 +462,12 @@
            :headers {"Content-Type" "text/html; charset=utf-8"}
            :body    (pico-page-layout
                      (str "Catégorie : " category-name)
-                     (category-content category-name category-topics))})
+                     (category-content category-name category-topics (:base-path settings))
+                     (:title settings)
+                     (:tagline settings)
+                     (:footer settings)
+                     (:source settings)
+                     (:base-path settings))})
 
         [:get "/search"]
         (let [query   (:q params)
@@ -470,7 +476,12 @@
            :headers {"Content-Type" "text/html; charset=utf-8"}
            :body    (pico-page-layout
                      (str "Résultats pour : " query)
-                     (search-content query results))})
+                     (search-content query results (:base-path settings))
+                     (:title settings)
+                     (:tagline settings)
+                     (:footer settings)
+                     (:source settings)
+                     (:base-path settings))})
 
         [:get "/topics"]
         (let [id   (:id params)
@@ -480,25 +491,40 @@
              :headers {"Content-Type" "text/html; charset=utf-8"}
              :body    (pico-page-layout
                        (:title item)
-                       (topics-content item))}
+                       (topics-content item (:base-path settings))
+                       (:title settings)
+                       (:tagline settings)
+                       (:footer settings)
+                       (:source settings)
+                       (:base-path settings))}
             {:status  404
              :headers {"Content-Type" "text/html; charset=utf-8"}
              :body    (pico-page-layout
                        "404"
-                       (not-found-content))}))
+                       (not-found-content (:base-path settings))
+                       (:title settings)
+                       (:tagline settings)
+                       (:footer settings)
+                       (:source settings)
+                       (:base-path settings))}))
 
         ;; Default route - 404
         {:status  404
          :headers {"Content-Type" "text/html; charset=utf-8"}
          :body    (pico-page-layout
                    "Page non trouvée"
-                   (error-content))}))))
+                   (error-content (:base-path settings))
+                   (:title settings)
+                   (:tagline settings)
+                   (:footer settings)
+                   (:source settings)
+                   (:base-path settings))}))))
 
 ;; Show help
 (defn show-help []
-  (log/info "Topics Web Server")
-  (log/info "Usage: topics [options]")
-  (log/info (cli/format-opts {:spec cli-options}))
+  (println "Usage: topics [options]")
+  (println "\nOptions:")
+  (println (cli/format-opts {:spec cli-options}))
   (System/exit 0))
 
 ;; Main function
@@ -509,28 +535,22 @@
           ;; Extract default values from cli-options for any missing settings
           defaults        (into {} (map (fn [[k v]] [k (:default v)]) cli-options))
           parsed-settings (merge defaults opts)]
-
       ;; Show help if requested
-      (when (:help parsed-settings)
-        (show-help))
-
+      (when (:help parsed-settings) (show-help))
       ;; Configure Timbre logging
       (log/merge-config! {:min-level (:log-level opts)})
-
-      ;; Update settings
-      (alter-var-root #'settings (constantly parsed-settings))
-
       ;; Load Topics data
       (let [topics-data (load-topics-data (:topics parsed-settings))]
         ;; Start the server
-        (log/info (str "Starting server at http://localhost:" (:port settings)))
-        (if (empty? (:base-path settings))
+        (log/info (str "Starting server at http://localhost:" (:port parsed-settings)))
+        (if (empty? (:base-path parsed-settings))
           (log/info "Running at root path /")
-          (log/info "Running at base path:" (:base-path settings)))
-        (log/info "Site title:" (:title settings))
-        (log/info "Site tagline:" (:tagline settings))
-        (log/info "Topics source:" (:source settings))
-        (server/run-server (create-app topics-data) {:port (:port settings)})
+          (log/info "Running at base path:" (:base-path parsed-settings)))
+        (log/info "Site title:" (:title parsed-settings))
+        (log/info "Site tagline:" (:tagline parsed-settings))
+        (log/info "Topics source:" (:source parsed-settings))
+        (server/run-server (create-app topics-data parsed-settings)
+                           {:port (:port parsed-settings)})
         (log/info "Server started. Press Ctrl+C to stop.")
         @(promise)))
     (catch Exception e
