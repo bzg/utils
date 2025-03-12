@@ -1,5 +1,9 @@
 #!/usr/bin/env bb
 
+;; Copyright (c) DINUM, Bastien Guerry
+;; SPDX-License-Identifier: EPL-2.0
+;; License-Filename: EPL-2.0.txt
+
 ;; This script runs a web app to let users subscribe to a Mailgun
 ;; mailing list. You need a Mailgun API endpoint, key and the list
 ;; identifier.
@@ -26,6 +30,7 @@
 ;; - base-path
 ;;
 ;; Use -h for more information.
+
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
          '[clojure.string :as str]
