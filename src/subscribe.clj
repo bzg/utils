@@ -21,13 +21,11 @@
 ;; This configuration file can let you override these variables:
 ;; - default-language
 ;; - ui-strings
-;; - log-min-level
 ;; - mailgun-api-endpoint
 ;; - mailgun-list-id
 ;; - base-path
 ;;
 ;; Use -h for more information.
-
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
          '[clojure.string :as str]
@@ -48,12 +46,13 @@
                :ref     "<port>"
                :default 8080
                :coerce  :int}
-   :list      {:alias :l
-               :desc  "      Mailgun list identifier"
-               :ref   "<email>"}
    :base-path {:alias :b
                :desc  "  Base path for deployments in subdirectories"
-               :ref   "<path>"}})
+               :ref   "<path>"}
+   :log-level {:alias   :l
+               :desc    " Set log level (debug, info, warn, error)"
+               :ref     "<level>"
+               :default :info}})
 
 (defn print-usage []
   (println "Usage: subscribe [options]")
@@ -72,17 +71,12 @@
   (println "\nExamples:")
   (println "  subscribe                # Run on default port 8080")
   (println "  subscribe -p 4444        # Run on port 4444")
-  (println "  subscribe -c config.edn  # Load configuration from file")
-  (println "  subscribe -l my@list.com # Specify list ID directly")
-  (println "  subscribe -b /app        # Set base path to /app"))
+  (println "  subscribe -l :debug      # Specify log level as :debug")
+  (println "  subscribe -b /app        # Set base path to /app")
+  (println "  subscribe -c config.edn  # Load configuration from file"))
 
 ;; Defaults
 (def default-language :en)
-(def log-min-level :info)
-
-;; Configure Timbre logging
-(log/merge-config!
- {:min-level log-min-level})
 
 ;; Anti-Spam protections
 (def rate-limit-window (* 60 60 1000)) ;; 1 hour in milliseconds
@@ -274,18 +268,14 @@
       (not (map? config-data))
       (log-false "Invalid configuration: expected a map")
       ;; (when-let [r (get config-data :ui-strings)] (not (apply map? [r])))
-      (and-not :ui-strings map?)
-      (log-false "Invalid configuration: ui-strings should be a map")
       (and-not :default-language keyword?)
       (log-false "Invalid configuration: default-language should be a keyword")
-      (and-not :log-min-level keyword?)
-      (log-false "Invalid configuration: log-min-level should be a keyword")
+      (and-not :ui-strings map?)
+      (log-false "Invalid configuration: ui-strings should be a map")
       (and-not :mailgun-list-id string?)
       (log-false "Invalid configuration: mailgun-list-id should be a string")
       (and-not :mailgun-api-endpoint string?)
       (log-false "Invalid configuration: mailgun-api-endpoint should be a string")
-      (and-not :mailgun-api-key string?)
-      (log-false "Invalid configuration: mailgun-api-key should be a string")
       (and-not :base-path string?)
       (log-false "Invalid configuration: base-path should be a string")
       :else true)))
@@ -295,12 +285,6 @@
   (when-let [lang (:default-language config-data)]
     (alter-var-root #'default-language (constantly lang))
     (log/info "Overriding default-language from config:" lang))
-  ;; Override log-min-level if specified
-  (when-let [level (:log-min-level config-data)]
-    (alter-var-root #'log-min-level (constantly level))
-    ;; Update logging configuration with new level
-    (log/merge-config! {:min-level level})
-    (log/info "Overriding log-min-level from config:" level))
   ;; Override mailgun-list-id if specified
   (when-let [list (:mailgun-list-id config-data)]
     (alter-var-root #'mailgun-list-id (constantly list))
@@ -309,10 +293,7 @@
   (when-let [endpoint (:mailgun-api-endpoint config-data)]
     (alter-var-root #'mailgun-api-endpoint (constantly endpoint))
     (log/info "Overriding mailgun-api-endpoint from config:" endpoint))
-  ;; Override mailgun-api-key if specified
-  (when-let [key (:mailgun-api-key config-data)]
-    (alter-var-root #'mailgun-api-key (constantly key))
-    (log/info "Overriding mailgun-api-key from config:" "****"))
+  ;; Override base-path if specified
   (when-let [path (:base-path config-data)]
     (alter-var-root #'base-path (constantly (if (str/ends-with? path "/")
                                               (str/replace path #"/$" "")
@@ -973,25 +954,23 @@
 
 ;; Main entry point
 (when (= *file* (System/getProperty "babashka.file"))
-  (let [opts        (cli/parse-opts *command-line-args* {:spec cli-options})
-        port        (get opts :port 8080)
-        config-path (:config opts)
-        list        (:list opts)
-        path        (:base-path opts)]
+  (let [opts (cli/parse-opts *command-line-args* {:spec cli-options})
+        port (get opts :port 8080)]
     ;; Handle help option
     (when (:help opts)
       (print-usage)
       (System/exit 0))
-    ;; Set list from command line if provided
-    (when list
-      (alter-var-root #'mailgun-list-id (constantly list))
-      (log/info "Setting mailgun-list-id from command line:" list))
+    ;; Configure Timbre logging
+    (when-let [log-level (get opts :log-level)]
+      (log/merge-config! {:min-level log-level})
+      (log/info "Setting log-level from command line:" log-level))
     ;; Set base-path from command line if provided
-    (when path
+    (when-let [path (:base-path opts)]
       (alter-var-root #'base-path (constantly path))
       (log/info "Setting base-path from command line:" path))
     ;; Process configuration file if provided
-    (when config-path (process-config-file config-path))
+    (when-let [config-path (:config opts)]
+      (process-config-file config-path))
     ;; Start the server
     (log/info (str "Starting server on http://localhost:" port))
     (log/info (str "Base path: " (if (str/blank? base-path) "[root]" base-path)))
