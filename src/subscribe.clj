@@ -82,9 +82,7 @@
 
 ;; Configure Timbre logging
 (log/merge-config!
- {:min-level      log-min-level
-  :timestamp-opts {:pattern "yyyy-MM-dd HH:mm:ss"}
-  :appenders      {:println {:enabled? true}}})
+ {:min-level log-min-level})
 
 ;; Anti-Spam protections
 (def rate-limit-window (* 60 60 1000)) ;; 1 hour in milliseconds
