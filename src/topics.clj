@@ -25,7 +25,8 @@
 (require '[org.httpkit.server :as server]
          '[cheshire.core :as json]
          '[clojure.string :as str]
-         '[babashka.cli :as cli])
+         '[babashka.cli :as cli]
+         '[taoensso.timbre :as log])
 
 ;; Define CLI specs
 (def cli-options
@@ -43,7 +44,7 @@
                :alias   :t
                :default "Topics"}
    :tagline   {:desc    "Website tagline"
-               :alias   :l
+               :alias   :T
                :default "A few topics to explore"}
    :footer    {:desc    "Footer text"
                :alias   :F
@@ -53,7 +54,11 @@
                :default ""}
    :help      {:desc   "Show help"
                :alias  :h
-               :coerce :boolean}})
+               :coerce :boolean}
+   :log-level {:alias   :l
+               :desc    "    Set log level (debug, info, warn, error)"
+               :ref     "<level>"
+               :default :info}})
 
 ;; Initialize settings - will be populated from CLI options
 (def settings {})
@@ -82,19 +87,19 @@
     (try
       (java.net.URLDecoder/decode s "UTF-8")
       (catch Exception _
-        (println "Warning: Error decoding URL parameter:" s)
+        (log/warn "Error decoding URL parameter:" s)
         s))))  ;; Return original on error
 
 ;; Load Topics data directly
 (defn load-topics-data [source]
   (try
-    (println "Loading Topics data from" source)
+    (log/info "Loading Topics data from" source)
     (let [content (slurp source)
           data    (json/parse-string content true)]
-      (println "Loaded" (count data) "Topics items")
+      (log/info "Loaded" (count data) "Topics items")
       data)
     (catch Exception e
-      (println "Error loading Topics data from" source ":" (.getMessage e))
+      (log/error "Error loading Topics data from" source ":" (.getMessage e))
       [])))
 
 ;; Helper function to strip HTML tags for text content searching
@@ -428,7 +433,7 @@
                 [(keyword (safe-url-decode k))
                  (safe-url-decode (or v ""))])))  ;; Handle missing values
       (catch Exception e
-        (println "Error parsing query string:" (.getMessage e))
+        (log/error "Error parsing query string:" (.getMessage e))
         {}))))
 
 ;; Create app function with topics-data as parameter
@@ -491,9 +496,9 @@
 
 ;; Show help
 (defn show-help []
-  (println "Topics Web Server")
-  (println "Usage: topics [options]")
-  (println (cli/format-opts {:spec cli-options}))
+  (log/info "Topics Web Server")
+  (log/info "Usage: topics [options]")
+  (log/info (cli/format-opts {:spec cli-options}))
   (System/exit 0))
 
 ;; Main function
@@ -509,24 +514,27 @@
       (when (:help parsed-settings)
         (show-help))
 
+      ;; Configure Timbre logging
+      (log/merge-config! {:min-level (:log-level opts)})
+
       ;; Update settings
       (alter-var-root #'settings (constantly parsed-settings))
 
       ;; Load Topics data
       (let [topics-data (load-topics-data (:topics parsed-settings))]
         ;; Start the server
-        (println (str "Starting server at http://localhost:" (:port settings)))
+        (log/info (str "Starting server at http://localhost:" (:port settings)))
         (if (empty? (:base-path settings))
-          (println "Running at root path /")
-          (println "Running at base path:" (:base-path settings)))
-        (println "Site title:" (:title settings))
-        (println "Site tagline:" (:tagline settings))
-        (println "Topics source:" (:source settings))
+          (log/info "Running at root path /")
+          (log/info "Running at base path:" (:base-path settings)))
+        (log/info "Site title:" (:title settings))
+        (log/info "Site tagline:" (:tagline settings))
+        (log/info "Topics source:" (:source settings))
         (server/run-server (create-app topics-data) {:port (:port settings)})
-        (println "Server started. Press Ctrl+C to stop.")
+        (log/info "Server started. Press Ctrl+C to stop.")
         @(promise)))
     (catch Exception e
-      (println "ERROR:" (.getMessage e))
+      (log/error "ERROR:" (.getMessage e))
       (.printStackTrace e)
       (System/exit 1))))
 
