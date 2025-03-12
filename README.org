@@ -3,6 +3,7 @@
 * Utils
 
 - subscribe :: Web application to let users subscribe to a Mailgun mailing list
+- topics :: Web application to browse "topics"
 
 * Feedback
 
@@ -24,7 +25,15 @@ This should take care of installing all you need:
 brew install babashka/brew/bbin
 #+end_src
 
-Once =bbin= is installed in your environment, run this in a terminal:
+Once =bbin= is installed in your environment, you can install the scripts:
+
+Topics:
+
+#+begin_src sh
+bbin install https://raw.githubusercontent.com/bzg/utils/refs/heads/main/src/topics.clj
+#+end_src
+
+Subscribe:
 
 #+begin_src sh
 bbin install https://raw.githubusercontent.com/bzg/utils/refs/heads/main/src/subscribe.clj
