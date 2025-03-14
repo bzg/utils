@@ -555,10 +555,19 @@
           (escape-html message)
           (escape-html (str debug-info))))
 
-;; Helper function for standard HTTP responses
+(def security-headers
+  {"X-Content-Type-Options"  "nosniff"
+   "X-Frame-Options"         "DENY"
+   "Content-Security-Policy" "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;"})
+
+(def security-headers-self
+  {"X-Content-Type-Options"  "nosniff"
+   "X-Frame-Options"         "DENY"
+   "Content-Security-Policy" "default-src 'self';"})
+
 (defn make-response [status type strings heading-key message-key & args]
   {:status  status
-   :headers {"Content-Type" "text/html; charset=UTF-8"}
+   :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
    :body    (apply result-template strings type heading-key message-key args)})
 
 (defn handle-error [req e debug-info]
@@ -567,7 +576,7 @@
   (let [lang    (determine-language req)
         strings (get-strings lang)]
     {:status  500
-     :headers {"Content-Type" "text/html; charset=UTF-8"}
+     :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
      :body    (debug-result-template
                strings
                "error"
@@ -682,10 +691,12 @@
         strings    (get-strings lang)
         csrf-token (generate-csrf-token)]
     {:status  200
-     :headers {"Content-Type" "text/html; charset=UTF-8"
-               "Set-Cookie"   (format "csrf_token=%s; Path=%s; HttpOnly; SameSite=Strict"
-                                      csrf-token
-                                      (if (str/blank? base-path) "/" (str base-path "/")))}
+     :headers (merge {"Content-Type" "text/html; charset=UTF-8"
+                      "Set-Cookie"
+                      (format "csrf_token=%s; Path=%s; HttpOnly; SameSite=Strict"
+                              csrf-token
+                              (if (str/blank? base-path) "/" base-path))}
+                     security-headers)
      :body    (build-index-html strings lang csrf-token)}))
 
 (defn parse-form-data [request]
@@ -806,8 +817,9 @@
           (do
             (log/warn "Rate limit exceeded for IP:" client-ip)
             {:status  429
-             :headers {"Content-Type" "text/html; charset=UTF-8"
-                       "Retry-After"  "3600"}
+             :headers (merge {"Content-Type" "text/html; charset=UTF-8"
+                              "Retry-After"  "3600"}
+                             security-headers)
              :body    (result-template strings "error" :rate-limit :rate-limit-message)})
 
           ;; Anti-spam: honeypot check
@@ -823,7 +835,7 @@
                 (log/error "No email provided in request")
                 (log/error "Form data:" (pr-str form-data))
                 {:status  400
-                 :headers {"Content-Type" "text/html; charset=UTF-8"}
+                 :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
                  :body    (debug-result-template
                            strings
                            "error"
@@ -865,7 +877,8 @@
                                  :max-requests  max-requests-per-window
                                  :current-log   (count @ip-request-log)}}]
     {:status  200
-     :headers {"Content-Type" "application/json; charset=UTF-8"}
+     :headers (merge {"Content-Type" "application/json; charset=UTF-8"}
+                     security-headers-self)
      :body    (json/generate-string debug-info {:pretty true})}))
 
 (defn handle-robots-txt []
@@ -890,7 +903,8 @@
         (do
           (log/info "Not found:" (:request-method req) uri)
           {:status  404
-           :headers {"Content-Type" "text/html; charset=UTF-8"}
+           :headers (merge {"Content-Type" "text/html; charset=UTF-8"}
+                           security-headers-self)
            :body    (format "<h1>%s</h1><p>%s: %s %s</p>"
                             "Not Found"
                             "Resource not found"
