@@ -479,7 +479,7 @@
           <p>%s</p>
         </header>
 
-        <form hx-post=\"%s/subscribe\" hx-target=\"#result\" hx-swap=\"outerHTML\" hx-indicator=\"#loading\">
+        <form hx-post=\"%s\" hx-target=\"#result\" hx-swap=\"outerHTML\" hx-indicator=\"#loading\">
           <input type=\"email\" id=\"email\" name=\"email\" placeholder=\"%s\" required>
 
           <!-- CSRF Protection -->
@@ -508,7 +508,7 @@
           (:title (:page strings))
           (:heading (:page strings))
           (:subheading (:page strings))
-          base-path               ;; Add base path to form action
+          (make-path "subscribe")
           (:email-placeholder (:form strings))
           csrf-token
           (:website-label (:form strings))
