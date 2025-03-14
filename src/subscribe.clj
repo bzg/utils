@@ -361,10 +361,8 @@
                                          {}
                                          log-map)))
       (reset! last-pruned-time now))
-
     ;; Update the request log with the current timestamp
     (swap! ip-request-log update ip #(conj (or % []) now))
-
     ;; Prune old entries every 1000 IP requests
     (when (> (count @ip-request-log) 1000)
       (swap! ip-request-log
@@ -373,11 +371,10 @@
                             (assoc m k (filter #(>= % window-start) v)))
                           {}
                           log-map))))
-
     (> (count recent-requests) max-requests-per-window)))
 
 (defn valid-email? [email]
-  (let [pattern    #"^[a-zA-Z0-9][a-zA-Z0-9._%+-]{0,63}@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+  (let [pattern    #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         max-length 254]
     (and (string? email)
          (<= (count email) max-length)
