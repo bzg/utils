@@ -74,6 +74,7 @@
 (def rate-limit-window (* 60 60 1000)) ;; 1 hour in milliseconds
 (def max-requests-per-window 5) ;; Maximum 5 requests per IP per hour
 (def ip-request-log (atom {}))
+(def last-pruned-time (atom (System/currentTimeMillis)))
 
 ;; Set up environment variables
 (def mailgun-list-id
@@ -348,12 +349,10 @@
       "unknown-ip"))
 
 (defn rate-limited? [ip]
-  (let [now              (System/currentTimeMillis)
-        last-pruned-time (atom (System/currentTimeMillis))
-        window-start     (- now rate-limit-window)
-        requests         (get @ip-request-log ip [])
-        recent-requests  (filter #(>= % window-start) requests)]
-
+  (let [now             (System/currentTimeMillis)
+        window-start    (- now rate-limit-window)
+        requests        (get @ip-request-log ip [])
+        recent-requests (filter #(>= % window-start) requests)]
     ;; Prune old entries periodically
     (when (> (- now @last-pruned-time) rate-limit-window)
       (swap! ip-request-log (fn [log-map]
