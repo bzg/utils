@@ -86,14 +86,22 @@
   (or (System/getenv "MAILGUN_API_KEY")
       (log/error "Missing MAILGUN_API_KEY")))
 
+;; Function to normalize base-path handling
+(defn normalize-base-path [path]
+  (if (str/blank? path)
+    ""
+    (let [path-without-trailing (if (str/ends-with? path "/")
+                                  (str/replace path #"/$" "")
+                                  path)
+          path-with-leading     (if (str/starts-with? path-without-trailing "/")
+                                  path-without-trailing
+                                  (str "/" path-without-trailing))]
+      path-with-leading)))
+
 ;; Base path configuration for subdirectory deployments
 (def base-path
   (let [path (or (System/getenv "SUBSCRIBE_BASE_PATH") "")]
-    (if (str/blank? path)
-      ""
-      (if (str/ends-with? path "/")
-        (str/replace path #"/$" "")  ;; Remove trailing slash
-        path))))
+    (normalize-base-path path)))
 
 ;; Log configuration
 (log/info "MAILGUN_LIST_ID=" mailgun-list-id)
@@ -104,12 +112,20 @@
 ;; Helper function to construct paths with the base path
 (defn make-path [& segments]
   (let [segments (remove str/blank? segments)]
-    (str base-path
-         (if (and (not (str/blank? base-path))
-                  (not (str/starts-with? (first segments) "/")))
-           "/"
-           "")
-         (str/join "/" segments))))
+    (if (str/blank? base-path)
+      ;; If no base path, just join segments with "/"
+      (str "/" (str/join "/" segments))
+      ;; If base path exists, handle special case when base-path ends with a segment name
+      (let [base-segment (last (str/split base-path #"/"))]
+        (if (and (= 1 (count segments))
+                 (= base-segment (first segments)))
+          ;; If the only segment matches the last part of base-path, avoid duplication
+          base-path
+          ;; Otherwise append segments properly
+          (str base-path
+               (when (not (str/starts-with? (first segments) "/"))
+                 "/")
+               (str/join "/" segments)))))))
 
 ;; Returns the Authorization header value for Mailgun API requests
 (def get-mailgun-auth-header
@@ -280,9 +296,7 @@
     (log/info "Overriding mailgun-api-endpoint from config:" endpoint))
   ;; Override base-path if specified
   (when-let [path (:base-path config-data)]
-    (alter-var-root #'base-path (constantly (if (str/ends-with? path "/")
-                                              (str/replace path #"/$" "")
-                                              path)))
+    (alter-var-root #'base-path (constantly (normalize-base-path path)))
     (log/info "Overriding base-path from config:" path)))
 
 ;; Function to merge UI strings from configuration with defaults
@@ -657,7 +671,11 @@
   (let [uri-without-base (if (and (not (str/blank? base-path))
                                   (str/starts-with? uri base-path))
                            (let [path (subs uri (count base-path))]
-                             (if (str/blank? path) "/" path))
+                             ;; Add this check to ensure we have a leading slash
+                             (cond
+                               (str/blank? path)           "/"
+                               (str/starts-with? path "/") path
+                               :else                       (str "/" path)))
                            uri)]
     (log/debug "Normalized URI from" uri "to" uri-without-base)
     uri-without-base))
@@ -671,7 +689,7 @@
      :headers {"Content-Type" "text/html; charset=UTF-8"
                "Set-Cookie"   (format "csrf_token=%s; Path=%s; HttpOnly; SameSite=Strict"
                                       csrf-token
-                                      (if (str/blank? base-path) "/" base-path))}
+                                      (if (str/blank? base-path) "/" (str base-path "/")))}
      :body    (build-index-html strings lang csrf-token)}))
 
 (defn parse-form-data [request]
@@ -905,7 +923,7 @@
       (log/info "Setting log-level from command line:" log-level))
     ;; Set base-path from command line if provided
     (when-let [path (:base-path opts)]
-      (alter-var-root #'base-path (constantly path))
+      (alter-var-root #'base-path (constantly (normalize-base-path path)))
       (log/info "Setting base-path from command line:" path))
     ;; Process configuration file if provided
     (when-let [config-path (:config opts)]
