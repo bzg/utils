@@ -326,8 +326,7 @@
                 [(keyword (safe-url-decode k))
                  (safe-url-decode (or v ""))])))  ;; Handle missing values
       (catch Exception e
-        (log/error "Error parsing query string:" (.getMessage e))
-        {}))))
+        (log/error "Error parsing query string:" (.getMessage e))))))
 
 (defn html-response [status title content settings]
   {:status  status
