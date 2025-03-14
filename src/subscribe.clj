@@ -657,10 +657,17 @@
        :debug   response}
 
       (< (:status response) 300)
-      (do
-        (warn-new-subscription!)
-        (log/info "Successfully subscribed email:" email)
-        {:success true})
+      (let [body-str (:body response)]
+        ;; Check if the response indicates the user was already subscribed
+        (if (and body-str (re-find #"already_subscribed|already exists" body-str))
+          (do
+            (log/info "Email already subscribed:" email)
+            {:success            true
+             :already_subscribed true})
+          (do
+            (warn-new-subscription!)
+            (log/info "Successfully subscribed email:" email)
+            {:success true})))
 
       :else
       (do
@@ -671,17 +678,19 @@
          :debug   {:status (:status response)
                    :body   (:body response)}}))))
 
-;; Function to normalize URI for path matching
 (defn normalize-uri [uri]
-  (let [uri-without-base (if (and (not (str/blank? base-path))
-                                  (str/starts-with? uri base-path))
-                           (let [path (subs uri (count base-path))]
-                             ;; Add this check to ensure we have a leading slash
-                             (cond
-                               (str/blank? path)           "/"
-                               (str/starts-with? path "/") path
-                               :else                       (str "/" path)))
-                           uri)]
+  (let [uri-without-base
+        (if (and (not (str/blank? base-path))
+                 (or (= uri base-path)
+                     (and (str/starts-with? uri (str base-path "/"))
+                          (> (count uri) (inc (count base-path))))))
+          (let [path (subs uri (count base-path))]
+            ;; Add this check to ensure we have a leading slash
+            (cond
+              (str/blank? path)           "/"
+              (str/starts-with? path "/") path
+              :else                       (str "/" path)))
+          uri)]
     (log/debug "Normalized URI from" uri "to" uri-without-base)
     uri-without-base))
 
@@ -747,37 +756,38 @@
 (defn process-subscription-action [strings action email]
   (case action
     "subscribe"
-    (if (check-if-subscribed email)
-      (make-response 200 "success" strings :already-subscribed :already-subscribed-message email)
-      (let [result (subscribe-to-mailgun email)]
-        (if (:success result)
-          (make-response 200 "success" strings :thank-you :success-subscribe email)
-          {:status  400
-           :headers {"Content-Type" "text/html; charset=UTF-8"}
-           :body    (debug-result-template
-                     strings
-                     "error"
-                     :operation-failed
-                     (or (:message result) (get-in strings [:messages :server-error]))
-                     (str "Debug info:\n" (pr-str (:debug result))))})))
+    (let [result (subscribe-to-mailgun email)]
+      (cond
+        (and (:success result) (:already_subscribed result))
+        (make-response 200 "success" strings :already-subscribed :already-subscribed-message email)
+        (:success result)
+        (make-response 200 "success" strings :thank-you :success-subscribe email)
+        :else
+        {:status  400
+         :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
+         :body    (debug-result-template
+                   strings
+                   "error"
+                   :operation-failed
+                   (or (:message result) (get-in strings [:messages :server-error]))
+                   (str "Debug info:\n" (pr-str (:debug result))))}))
 
     "unsubscribe"
-    (if (not (check-if-subscribed email))
-      (make-response 200 "warning" strings :not-subscribed :not-subscribed-message email)
-      (let [result (unsubscribe-from-mailgun email)]
-        (if (:success result)
-          (make-response 200 "success" strings :unsubscribed :unsubscribed-message email)
-          (if (:not_found result)
-            (make-response 200 "warning" strings :not-subscribed :not-subscribed-message email)
-            {:status  400
-             :headers {"Content-Type" "text/html; charset=UTF-8"}
-             :body    (debug-result-template
-                       strings
-                       "error"
-                       :operation-failed
-                       (or (:message result) (get-in strings [:messages :server-error]))
-                       (str "Debug info:\n" (pr-str (:debug result))))}))))
-
+    (let [result (unsubscribe-from-mailgun email)]
+      (cond
+        (:success result)
+        (make-response 200 "success" strings :unsubscribed :unsubscribed-message email)
+        (:not_found result)
+        (make-response 200 "warning" strings :not-subscribed :not-subscribed-message email)
+        :else
+        {:status  400
+         :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
+         :body    (debug-result-template
+                   strings
+                   "error"
+                   :operation-failed
+                   (or (:message result) (get-in strings [:messages :server-error]))
+                   (str "Debug info:\n" (pr-str (:debug result))))}))
     ;; Default case for unknown action
     (make-response 400 "error" strings :unknown-action :unknown-action)))
 
