@@ -40,24 +40,11 @@
          '[babashka.cli :as cli])
 
 (def cli-options
-  {:help      {:alias :h
-               :desc  "             Display this help message"
-               :type  :boolean}
-   :config    {:alias :c
-               :desc  "     Path to configuration file"
-               :ref   "<file>"}
-   :port      {:alias   :p
-               :desc    "       Port number to run the server on"
-               :ref     "<port>"
-               :default 8080
-               :coerce  :int}
-   :base-path {:alias :b
-               :desc  "  Base path for deployments in subdirectories"
-               :ref   "<path>"}
-   :log-level {:alias   :l
-               :desc    " Set log level (debug, info, warn, error)"
-               :ref     "<level>"
-               :default :info}})
+  {:help      {:alias :h :desc "Display help" :type :boolean}
+   :config    {:alias :c :desc "Config file path" :ref "<file>"}
+   :port      {:alias :p :desc "Port number" :ref "<port>" :default 8080 :coerce :int}
+   :base-path {:alias :b :desc "Base path" :ref "<path>"}
+   :log-level {:alias :l :desc "Log level" :ref "<level>" :default :info}})
 
 (defn print-usage []
   (println "Usage: subscribe [options]")
@@ -109,10 +96,10 @@
         path))))
 
 ;; Log configuration
-(log/info "MAILGUN_LIST_ID:" mailgun-list-id)
-(log/info "MAILGUN_API_ENDPOINT:" mailgun-api-endpoint)
-(log/info "MAILGUN_API_KEY:" (if mailgun-api-key "****" "Not set"))
-(log/info "SUBSCRIBE_BASE_PATH:" (if (str/blank? base-path) "[not set]" base-path))
+(log/info "MAILGUN_LIST_ID=" mailgun-list-id)
+(log/info "MAILGUN_API_ENDPOINT=" mailgun-api-endpoint)
+(log/info "MAILGUN_API_KEY=" (if mailgun-api-key "****" "Not set"))
+(log/info "SUBSCRIBE_BASE_PATH=" (if (str/blank? base-path) "[not set]" base-path))
 
 ;; Helper function to construct paths with the base path
 (defn make-path [& segments]
@@ -154,21 +141,15 @@
   "Makes a request to the Mailgun API with appropriate authentication"
   [method url body-params]
   (let [auth-header  (get-mailgun-auth-header)
-        request-opts {:headers {"Authorization" auth-header}
-                      :throw   false}
-        request-opts (if body-params
-                       (assoc request-opts
-                              :headers (assoc (:headers request-opts)
-                                              "Content-Type" "application/x-www-form-urlencoded")
-                              :body body-params)
-                       request-opts)]
+        request-opts (cond-> {:headers {"Authorization" auth-header} :throw false}
+                       body-params (assoc :headers {"Authorization" auth-header
+                                                    "Content-Type"  "application/x-www-form-urlencoded"}
+                                          :body body-params))
+        http-fn      (get {:get http/get :post http/post :delete http/delete} method)]
     (try
-      (case method
-        :get    (http/get url request-opts)
-        :post   (http/post url request-opts)
-        :delete (http/delete url request-opts))
+      (http-fn url request-opts)
       (catch Exception e
-        (log/error e (str "Exception during Mailgun " (name method) " request to " url))
+        (log/error e (str "Mailgun " (name method) " error: " url))
         {:error       true
          :exception   (.getMessage e)
          :stack-trace (with-out-str (.printStackTrace e))}))))
@@ -272,7 +253,6 @@
     (cond
       (not (map? config-data))
       (log-false "Invalid configuration: expected a map")
-      ;; (when-let [r (get config-data :ui-strings)] (not (apply map? [r])))
       (and-not :default-language keyword?)
       (log-false "Invalid configuration: default-language should be a keyword")
       (and-not :ui-strings map?)
@@ -535,7 +515,6 @@
           (:subscribe-button (:form strings))
           (:unsubscribe-button (:form strings))))
 
-;; Result templates using UI strings with HTML escaping
 (defn result-template [strings type heading-key message-key & args]
   (let [heading (get-in strings [:messages heading-key])
         message (get-in strings [:messages message-key])]
@@ -566,33 +545,26 @@
           (escape-html message)
           (escape-html (str debug-info))))
 
-;; Result functions
-(defn rate-limit-result [strings]
-  (result-template strings "error" :rate-limit :rate-limit-message))
+;; Helper function for standard HTTP responses
+(defn make-response [status type strings heading-key message-key & args]
+  {:status  status
+   :headers {"Content-Type" "text/html; charset=UTF-8"}
+   :body    (apply result-template strings type heading-key message-key args)})
 
-(defn invalid-email-result [strings email]
-  (result-template strings "error" :invalid-email :invalid-email-message email))
-
-(defn spam-detected-result [strings]
-  (result-template strings "error" :spam-detected :spam-detected-message))
-
-(defn csrf-invalid-result [strings]
-  (result-template strings "error" :csrf-invalid :csrf-invalid-message))
-
-(defn success-result [strings email]
-  (result-template strings "success" :thank-you :success-subscribe email))
-
-(defn already-subscribed-result [strings email]
-  (result-template strings "success" :already-subscribed :already-subscribed-message email))
-
-(defn unsubscribed-result [strings email]
-  (result-template strings "success" :unsubscribed :unsubscribed-message email))
-
-(defn not-subscribed-result [strings email]
-  (result-template strings "warning" :not-subscribed :not-subscribed-message email))
-
-(defn error-result [strings message debug-info]
-  (debug-result-template strings "error" :operation-failed message debug-info))
+(defn handle-error [req e debug-info]
+  (log/error "Error:" (str e))
+  (log/error "Stack trace:" (with-out-str (.printStackTrace e)))
+  (let [lang    (determine-language req)
+        strings (get-strings lang)]
+    {:status  500
+     :headers {"Content-Type" "text/html; charset=UTF-8"}
+     :body    (debug-result-template
+               strings
+               "error"
+               :operation-failed
+               (get-in strings [:messages :server-error])
+               (str "Exception: " (.getMessage e) "\n\n"
+                    "Debug info:\n" debug-info))}))
 
 (defn check-if-subscribed [email]
   (log/info "Checking if email is already subscribed:" email)
@@ -747,6 +719,43 @@
       {})
     (catch Throwable t (log/error "Error parsing query params:" (str t)) {})))
 
+(defn process-subscription-action [strings action email]
+  (case action
+    "subscribe"
+    (if (check-if-subscribed email)
+      (make-response 200 "success" strings :already-subscribed :already-subscribed-message email)
+      (let [result (subscribe-to-mailgun email)]
+        (if (:success result)
+          (make-response 200 "success" strings :thank-you :success-subscribe email)
+          {:status  400
+           :headers {"Content-Type" "text/html; charset=UTF-8"}
+           :body    (debug-result-template
+                     strings
+                     "error"
+                     :operation-failed
+                     (or (:message result) (get-in strings [:messages :server-error]))
+                     (str "Debug info:\n" (pr-str (:debug result))))})))
+
+    "unsubscribe"
+    (if (not (check-if-subscribed email))
+      (make-response 200 "warning" strings :not-subscribed :not-subscribed-message email)
+      (let [result (unsubscribe-from-mailgun email)]
+        (if (:success result)
+          (make-response 200 "success" strings :unsubscribed :unsubscribed-message email)
+          (if (:not_found result)
+            (make-response 200 "warning" strings :not-subscribed :not-subscribed-message email)
+            {:status  400
+             :headers {"Content-Type" "text/html; charset=UTF-8"}
+             :body    (debug-result-template
+                       strings
+                       "error"
+                       :operation-failed
+                       (or (:message result) (get-in strings [:messages :server-error]))
+                       (str "Debug info:\n" (pr-str (:debug result))))}))))
+
+    ;; Default case for unknown action
+    (make-response 400 "error" strings :unknown-action :unknown-action)))
+
 ;; Handle subscription with robust form data parsing
 (defn handle-subscribe [req]
   (log/info "Received subscription request")
@@ -776,9 +785,7 @@
           (log/warn "CSRF token validation failed")
           (log/warn "Form token:" form-csrf-token)
           (log/warn "Cookie token:" cookie-csrf-token)
-          {:status  403
-           :headers {"Content-Type" "text/html; charset=UTF-8"}
-           :body    (csrf-invalid-result strings)})
+          (make-response 403 "error" strings :csrf-invalid :csrf-invalid-message))
 
         ;; Anti-spam: rate limiting
         (if (rate-limited? client-ip)
@@ -787,15 +794,13 @@
             {:status  429
              :headers {"Content-Type" "text/html; charset=UTF-8"
                        "Retry-After"  "3600"}
-             :body    (rate-limit-result strings)})
+             :body    (result-template strings "error" :rate-limit :rate-limit-message)})
 
           ;; Anti-spam: honeypot check
           (if (honeypot-filled? form-data)
             (do
               (log/warn "Spam detected: honeypot field filled from IP:" client-ip)
-              {:status  400
-               :headers {"Content-Type" "text/html; charset=UTF-8"}
-               :body    (spam-detected-result strings)})
+              (make-response 400 "error" strings :spam-detected :spam-detected-message))
 
             ;; Email validation
             (cond
@@ -805,8 +810,10 @@
                 (log/error "Form data:" (pr-str form-data))
                 {:status  400
                  :headers {"Content-Type" "text/html; charset=UTF-8"}
-                 :body    (error-result
+                 :body    (debug-result-template
                            strings
+                           "error"
+                           :operation-failed
                            (get-in strings [:messages :no-email])
                            (str "Request method: " (name (:request-method req)) "\n"
                                 "Headers: " (pr-str (:headers req)) "\n"
@@ -816,81 +823,15 @@
               (not (valid-email? email))
               (do
                 (log/error "Invalid email format:" email)
-                {:status  400
-                 :headers {"Content-Type" "text/html; charset=UTF-8"}
-                 :body    (invalid-email-result strings email)})
+                (make-response 400 "error" strings :invalid-email :invalid-email-message email))
 
               ;; Valid request, proceed with normal handling
               :else
-              (case action
-                "subscribe"
-                (if (check-if-subscribed email)
-                  (do
-                    (log/info "Email already subscribed:" email)
-                    {:status  200
-                     :headers {"Content-Type" "text/html; charset=UTF-8"}
-                     :body    (already-subscribed-result strings email)})
-
-                  ;; If not subscribed, proceed with subscription
-                  (let [result (subscribe-to-mailgun email)]
-                    (if (:success result)
-                      {:status  200
-                       :headers {"Content-Type" "text/html; charset=UTF-8"}
-                       :body    (success-result strings email)}
-                      {:status  400
-                       :headers {"Content-Type" "text/html; charset=UTF-8"}
-                       :body    (error-result
-                                 strings
-                                 (or (:message result) (get-in strings [:messages :server-error]))
-                                 (str "Debug info:\n" (pr-str (:debug result))))})))
-
-                "unsubscribe"
-                (if (not (check-if-subscribed email))
-                  (do
-                    (log/info "Email not subscribed, can't unsubscribe:" email)
-                    {:status  200 ; Changed from 404 to 200 for better user experience
-                     :headers {"Content-Type" "text/html; charset=UTF-8"}
-                     :body    (not-subscribed-result strings email)})
-
-                  ;; If subscribed, proceed with unsubscription
-                  (let [result (unsubscribe-from-mailgun email)]
-                    (if (:success result)
-                      {:status  200
-                       :headers {"Content-Type" "text/html; charset=UTF-8"}
-                       :body    (unsubscribed-result strings email)}
-                      (if (:not_found result)
-                        {:status  200 ; Changed from 404 to 200 for better user experience
-                         :headers {"Content-Type" "text/html; charset=UTF-8"}
-                         :body    (not-subscribed-result strings email)}
-                        {:status  400
-                         :headers {"Content-Type" "text/html; charset=UTF-8"}
-                         :body    (error-result
-                                   strings
-                                   (or (:message result) (get-in strings [:messages :server-error]))
-                                   (str "Debug info:\n" (pr-str (:debug result))))}))))
-
-                ;; Default case for unknown action
-                (do
-                  (log/error "Unknown action requested:" action)
-                  {:status  400
-                   :headers {"Content-Type" "text/html; charset=UTF-8"}
-                   :body    (error-result
-                             strings
-                             (get-in strings [:messages :unknown-action])
-                             (str "Unknown action: " action))})))))))
+              (process-subscription-action strings action email))))))
 
     (catch Throwable e
-      (log/error "Exception in handle-subscribe:" (str e))
-      (log/error "Stack trace:" (with-out-str (.printStackTrace e)))
-      (let [lang    (determine-language req)
-            strings (get-strings lang)]
-        {:status  500
-         :headers {"Content-Type" "text/html; charset=UTF-8"}
-         :body    (error-result
-                   strings
-                   (get-in strings [:messages :server-error])
-                   (str "Exception: " (.getMessage e) "\n\n"
-                        "Stack trace:\n" (with-out-str (.printStackTrace e))))}))))
+      (handle-error req e (str "Request method: " (name (:request-method req)) "\n"
+                               "Headers: " (pr-str (:headers req)))))))
 
 ;; Debug endpoint
 (defn handle-debug [req]
@@ -942,14 +883,7 @@
                             (name (:request-method req))
                             uri)}))
       (catch Throwable e
-        (log/error "Uncaught exception in request handler:" (str e))
-        (log/error "Stack trace:" (with-out-str (.printStackTrace e)))
-        {:status  500
-         :headers {"Content-Type" "text/html; charset=UTF-8"}
-         :body    (str "<h1>Internal Server Error</h1><pre>"
-                       (.getMessage e) "\n\n"
-                       (with-out-str (.printStackTrace e))
-                       "</pre>")}))))
+        (handle-error req e (str "URI: " uri))))))
 
 (defn start-server [& [port]]
   (let [port (or port 8080)]
