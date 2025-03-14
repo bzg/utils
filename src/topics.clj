@@ -60,12 +60,8 @@
                :ref     "<level>"
                :default :info}})
 
-;; Function to append base path to URLs
 (defn with-base-path [path base-path]
-  (let [clean-base (if (str/ends-with? base-path "/")
-                     (subs base-path 0 (dec (count base-path)))
-                     base-path)]
-    (str clean-base path)))
+  (str (str/replace base-path #"/$" "") path))
 
 ;; Safely encode URL components to handle special characters
 (defn safe-url-encode [s]
@@ -140,19 +136,12 @@
         (str/trim))))
 
 (defn search-topics [query topics-data]
-  (if (or (nil? query) (empty? query))
-    []
-    (let [sanitized-query  (sanitize-search-query query)
-          query-normalized (normalize-text sanitized-query)]
-      (filter (fn [item]
-                (or
-                 ;; Search in title
-                 (str/includes? (normalize-text (:title item)) query-normalized)
-                 ;; Search in content (stripping HTML tags)
-                 (let [content-text (strip-html (:content item))]
-                   (str/includes? (normalize-text content-text) query-normalized))
-                 ;; Search in category/path
-                 (some #(str/includes? (normalize-text %) query-normalized) (:path item))))
+  (when (seq query)
+    (let [query-norm (normalize-text (sanitize-search-query query))]
+      (filter (fn [{:keys [title content path]}]
+                (or (str/includes? (normalize-text title) query-norm)
+                    (str/includes? (normalize-text (strip-html content)) query-norm)
+                    (some #(str/includes? (normalize-text %) query-norm) path)))
               topics-data))))
 
 ;; Function to get categories from path
@@ -179,112 +168,24 @@
 
   <style>
   /* Custom styles */
-  .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 1rem;
-  }
-
-  header.site-header {
-      padding: 1rem 0;
-      background-color: #f8f9fa;
-      margin-bottom: 2rem;
-  }
-
-  footer {
-      margin-top: 3rem;
-      padding: 2rem 0;
-      background-color: #f8f9fa;
-  }
-
-  .category-card {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-  }
-
-  .category-card > a {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 1.5rem;
-      text-decoration: none;
-      color: inherit;
-      border: 1px solid #dee2e6;
-      border-radius: 0.5rem;
-      background-color: white;
-      transition: transform 0.2s, box-shadow 0.2s;
-  }
-
-  .category-card > a:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-  }
-
-  .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 2rem;
-  }
-
-  details {
-      margin-bottom: 1rem;
-      border: 1px solid #dee2e6;
-      border-radius: 0.5rem;
-      padding: 1rem;
-  }
-
-  details summary {
-      cursor: pointer;
-      font-weight: bold;
-      padding: 0.5rem 0;
-  }
-
-  details[open] summary {
-      margin-bottom: 1rem;
-  }
-
-  .back-link {
-      display: inline-flex;
-      align-items: center;
-      margin-bottom: 1rem;
-  }
-
-  .back-link::before {
-      content: '←';
-      margin-right: 0.5rem;
-  }
-
-  .search-form {
-      margin-bottom: 3rem;
-  }
-
-  .search-container {
-      display: flex;
-      gap: 0.5rem;
-  }
-
-  .search-container input[type=\"search\"] {
-      flex-grow: 1;
-  }
-
-  .alert {
-      padding:       1rem;
-      border-radius: 0.5rem;
-      margin-bottom: 1rem;
-  }
-
-  .alert-info {
-      background-color: #e7f5ff;
-      border:           1px solid #a5d8ff;
-      color:            #1971c2;
-  }
-
-  .alert-error {
-      background-color: #ffe3e3;
-      border:           1px solid #ffa8a8;
-      color:            #e03131;
-  }
+  .container {max-width: 1200px; margin: 0 auto; padding: 0 1rem;}
+  header.site-header {padding: 1rem 0; background-color: #f8f9fa; margin-bottom: 2rem;}
+  footer {margin-top: 3rem; padding: 2rem 0; background-color: #f8f9fa;}
+  .category-card {height: 100%; display: flex; flex-direction: column;}
+  .category-card > a {flex-grow: 1; display: flex; flex-direction: column; padding: 1.5rem; text-decoration: none; color: inherit; border: 1px solid #dee2e6; border-radius: 0.5rem; background-color: white; transition: transform 0.2s, box-shadow 0.2s;}
+  .category-card > a:hover {transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);}
+  .grid {display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2rem;}
+  details {margin-bottom: 1rem; border: 1px solid #dee2e6; border-radius: 0.5rem; padding: 1rem;}
+  details summary {cursor: pointer; font-weight: bold; padding: 0.5rem 0;}
+  details[open] summary {margin-bottom: 1rem;}
+  .back-link {display: inline-flex; align-items: center; margin-bottom: 1rem;}
+  .back-link::before {content: '←'; margin-right: 0.5rem;}
+  .search-form {margin-bottom: 3rem;}
+  .search-container {display: flex; gap: 0.5rem;}
+  .search-container input[type=\"search\"] {flex-grow: 1;}
+  .alert {padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;}
+  .alert-info {background-color: #e7f5ff; border: 1px solid #a5d8ff; color: #1971c2;}
+  .alert-error {background-color: #ffe3e3; border: 1px solid #ffa8a8; color: #e03131;}
   </style>
   </head>
   <body>
@@ -320,7 +221,7 @@
 (defn home-content [topics-data base-path]
   (str "<div>
   <form action=\"" (with-base-path "/search" base-path) "\" method=\"get\" class=\"search-form\" role=\"search\">
-  <input placeholder=\"Rechercher dans les sujets...\" type=\"search\" id=\"search-input\" name=\"q\">
+  <input placeholder=\"Rechercher\" type=\"search\" id=\"search-input\" name=\"q\">
   <button type=\"submit\">Rechercher</button>
   </form>
   <div class=\"grid\">"
@@ -387,25 +288,22 @@
   </article>
   </div>"))
 
-(defn not-found-content [base-path]
-  (str "<div>
+(defn error-content [base-path type]
+  (let [title   (if (= type :not-found) "Contenu introuvable" "Page non trouvée")
+        message (if (= type :not-found)
+                  "L'article demandé n'existe pas"
+                  "La page demandée n'existe pas")
+        action  (if (= type :not-found)
+                  "Vérifiez l'URL ou effectuez une nouvelle recherche."
+                  "Vérifiez l'URL ou retournez à l'accueil.")]
+    (str "<div>
   <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
-  <h2>Contenu introuvable</h2>
+  <h2>" title "</h2>
   <div class=\"alert alert-error\">
-  <h3>L'article demandé n'existe pas</h3>
-  <p>Vérifiez l'URL ou effectuez une nouvelle recherche.</p>
+  <h3>" message "</h3>
+  <p>" action "</p>
   </div>
-  </div>"))
-
-(defn error-content [base-path]
-  (str "<div>
-  <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
-  <h2>Page non trouvée</h2>
-  <div class=\"alert alert-error\">
-  <h3>La page demandée n'existe pas</h3>
-  <p>Vérifiez l'URL ou retournez à l'accueil.</p>
-  </div>
-  </div>"))
+  </div>")))
 
 ;; Function to extract path without base path
 (defn strip-base-path [uri base-path]
@@ -431,6 +329,13 @@
         (log/error "Error parsing query string:" (.getMessage e))
         {}))))
 
+(defn html-response [status title content settings]
+  {:status  status
+   :headers {"Content-Type" "text/html; charset=utf-8"}
+   :body    (pico-page-layout
+             title content (:title settings) (:tagline settings)
+             (:footer settings) (:source settings) (:base-path settings))})
+
 ;; Create app function with topics-data and settings as parameters
 (defn create-app [topics-data settings]
   (fn [{:keys [request-method uri query-string]}]
@@ -439,16 +344,9 @@
 
       (case [request-method path]
         [:get "/"]
-        {:status  200
-         :headers {"Content-Type" "text/html; charset=utf-8"}
-         :body    (pico-page-layout
-                   "Accueil"
-                   (home-content topics-data (:base-path settings))
-                   (:title settings)
-                   (:tagline settings)
-                   (:footer settings)
-                   (:source settings)
-                   (:base-path settings))}
+        (html-response 200 "Accueil"
+                       (home-content topics-data (:base-path settings))
+                       settings)
 
         [:get "/robots.txt"]
         {:status  200
@@ -458,67 +356,37 @@
         [:get "/category"]
         (let [category-name   (:name params)
               category-topics (get-topics-by-category category-name topics-data)]
-          {:status  200
-           :headers {"Content-Type" "text/html; charset=utf-8"}
-           :body    (pico-page-layout
-                     (str "Catégorie : " category-name)
-                     (category-content category-name category-topics (:base-path settings))
-                     (:title settings)
-                     (:tagline settings)
-                     (:footer settings)
-                     (:source settings)
-                     (:base-path settings))})
+          (html-response 200
+                         (str "Catégorie : " category-name)
+                         (category-content category-name category-topics (:base-path settings))
+                         settings))
 
         [:get "/search"]
         (let [query   (:q params)
               results (search-topics query topics-data)]
-          {:status  200
-           :headers {"Content-Type" "text/html; charset=utf-8"}
-           :body    (pico-page-layout
-                     (str "Résultats pour : " query)
-                     (search-content query results (:base-path settings))
-                     (:title settings)
-                     (:tagline settings)
-                     (:footer settings)
-                     (:source settings)
-                     (:base-path settings))})
+          (html-response 200
+                         (str "Résultats pour : " query)
+                         (search-content query results (:base-path settings))
+                         settings))
 
         [:get "/topics"]
         (let [id   (:id params)
               item (first (filter #(= (:title %) id) topics-data))]
           (if item
-            {:status  200
-             :headers {"Content-Type" "text/html; charset=utf-8"}
-             :body    (pico-page-layout
-                       (:title item)
-                       (topics-content item (:base-path settings))
-                       (:title settings)
-                       (:tagline settings)
-                       (:footer settings)
-                       (:source settings)
-                       (:base-path settings))}
-            {:status  404
-             :headers {"Content-Type" "text/html; charset=utf-8"}
-             :body    (pico-page-layout
-                       "404"
-                       (not-found-content (:base-path settings))
-                       (:title settings)
-                       (:tagline settings)
-                       (:footer settings)
-                       (:source settings)
-                       (:base-path settings))}))
+            (html-response 200
+                           (:title item)
+                           (topics-content item (:base-path settings))
+                           settings)
+            (html-response 404
+                           "404"
+                           (error-content (:base-path settings) :not-found)
+                           settings)))
 
         ;; Default route - 404
-        {:status  404
-         :headers {"Content-Type" "text/html; charset=utf-8"}
-         :body    (pico-page-layout
-                   "Page non trouvée"
-                   (error-content (:base-path settings))
-                   (:title settings)
-                   (:tagline settings)
-                   (:footer settings)
-                   (:source settings)
-                   (:base-path settings))}))))
+        (html-response 404
+                       "Page non trouvée"
+                       (error-content (:base-path settings) :page-not-found)
+                       settings)))))
 
 ;; Show help
 (defn show-help []
@@ -527,30 +395,26 @@
   (println (cli/format-opts {:spec cli-options}))
   (System/exit 0))
 
-;; Main function
 (defn -main []
   (try
-    ;; Parse command line arguments with babashka.cli
-    (let [opts            (cli/parse-opts *command-line-args* {:spec cli-options})
-          ;; Extract default values from cli-options for any missing settings
-          defaults        (into {} (map (fn [[k v]] [k (:default v)]) cli-options))
-          parsed-settings (merge defaults opts)]
+    ;; Parse command line arguments with simplified handling
+    (let [opts (cli/parse-opts *command-line-args* {:spec cli-options})]
       ;; Show help if requested
-      (when (:help parsed-settings) (show-help))
+      (when (:help opts) (show-help))
       ;; Configure Timbre logging
       (log/merge-config! {:min-level (:log-level opts)})
       ;; Load Topics data
-      (let [topics-data (load-topics-data (:topics parsed-settings))]
+      (let [topics-data (load-topics-data (:topics opts))]
         ;; Start the server
-        (log/info (str "Starting server at http://localhost:" (:port parsed-settings)))
-        (if (empty? (:base-path parsed-settings))
+        (log/info (str "Starting server at http://localhost:" (:port opts)))
+        (if (empty? (:base-path opts))
           (log/info "Running at root path /")
-          (log/info "Running at base path:" (:base-path parsed-settings)))
-        (log/info "Site title:" (:title parsed-settings))
-        (log/info "Site tagline:" (:tagline parsed-settings))
-        (log/info "Topics source:" (:source parsed-settings))
-        (server/run-server (create-app topics-data parsed-settings)
-                           {:port (:port parsed-settings)})
+          (log/info "Running at base path:" (:base-path opts)))
+        (log/info "Site title:" (:title opts))
+        (log/info "Site tagline:" (:tagline opts))
+        (log/info "Topics source:" (:source opts))
+        (server/run-server (create-app topics-data opts)
+                           {:port (:port opts)})
         (log/info "Server started. Press Ctrl+C to stop.")
         @(promise)))
     (catch Exception e
