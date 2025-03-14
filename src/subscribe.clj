@@ -255,7 +255,7 @@
     (if (.exists (java.io.File. file-path))
       (let [config-content (slurp file-path)]
         (log/info "Reading configuration from:" file-path)
-        (edn/read-string config-content))
+        (edn/read-string {:readers {}} config-content))
       (do
         (log/warn "Configuration file not found:" file-path)
         {}))
