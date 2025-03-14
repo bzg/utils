@@ -1,17 +1,15 @@
-#+title: Org utils
+#+title: Org CLI utils
 
-* Utils
+* Presentation
 
 - subscribe :: Web application to let users subscribe to a Mailgun mailing list
 - topics :: Web application to browse "topics"
 
-* Feedback
+* Contributing
 
-I don't use issues for now.
+To get or provide feedback, send an email to *bzg@bzg.fr*.
 
-To get or provide feedback, simply send an email to *bzg@bzg.fr*.
-
-* Install and update
+* Install
 
 The scripts are written in [[https://clojure.org][Clojure]] with [[https://babashka.org][Babashka]] and we recommend installing them with [[https://github.com/babashka/bbin][bbin]].
 
