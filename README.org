@@ -1,11 +1,11 @@
 #+title: Org CLI utils
 
-* Presentation
+* Intro
 
 - subscribe :: Web application to let users subscribe to a Mailgun mailing list
 - topics :: Web application to browse "topics"
 
-* Contributing
+* Feedback
 
 To get or provide feedback, send an email to *bzg@bzg.fr*.
 
@@ -44,4 +44,4 @@ donation to [[https://www.clojuriststogether.org][clojuriststogether.org]].
 
 * License
 
-Scripts in this repositories are licensed under [[LICENSES/EPL-2.0.txt][EPL-2.0]].
+The code in this repository is licensed under [[LICENSES/EPL-2.0.txt][EPL-2.0]].
