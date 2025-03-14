@@ -4,32 +4,37 @@
 ;; SPDX-License-Identifier: EPL-2.0
 ;; License-Filename: EPL-2.0.txt
 
-;; This script runs a web app to let users subscribe to a Mailgun
-;; mailing list. You need a Mailgun API endpoint, key and the list
-;; identifier.
+;; This script runs a web application to let users subscribe to a
+;; Mailgun mailing list. You need a Mailgun API key.
 ;;
-;; You can store these values in environment variables:
-;; MAILGUN_LIST_ID (example: "my@list.com")
-;; MAILGUN_API_ENDPOINT (example "https://api.eu.mailgun.net/v3")
-;; MAILGUN_API_KEY (example "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
+;; You need to set these environment variables:
 ;;
-;; By default, the web application runs as http://localhost:8080:
+;; export MAILGUN_LIST_ID="my@list.com"
+;; export MAILGUN_API_ENDPOINT="https://api.eu.mailgun.net/v3"
+;; export MAILGUN_API_KEY="xxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
+;;
+;; By default, the application runs on http://localhost:8080:
+;;
 ;; ~$ subscribe
 ;;
-;; You can also set a base path (e.g. "http://localhost:8080/newsletter") with
-;; SUBSCRIBE_BASE_PATH
+;; You can also set a base path to deploy the application on a
+;; subdirectory (e.g. "http://localhost:8080/newsletter"):
 ;;
-;; You can use a EDN configuration file for setting more options:
+;; export SUBSCRIBE_BASE_PATH="/newsletter"
+;;
+;; You can use a EDN configuration file for setting options:
+;;
 ;; ~$ subscribe --config config.edn
 ;;
-;; This configuration file can let you override these variables:
+;; This config file can let you set/override these variables:
+;;
 ;; - default-language
 ;; - ui-strings
 ;; - mailgun-api-endpoint
 ;; - mailgun-list-id
 ;; - base-path
 ;;
-;; Use -h for more information.
+;; ~$ subscribe -h # Show more information
 
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
@@ -116,11 +121,13 @@
     (if (str/blank? base-path)
       ;; If no base path, just join segments with "/"
       (str "/" (str/join "/" segments))
-      ;; If base path exists, handle special case when base-path ends with a segment name
+      ;; If base path exists, handle special case when base-path ends
+      ;; with a segment name
       (let [base-segment (last (str/split base-path #"/"))]
         (if (and (= 1 (count segments))
                  (= base-segment (first segments)))
-          ;; If the only segment matches the last part of base-path, avoid duplication
+          ;; If the only segment matches the last part of base-path,
+          ;; avoid duplication
           base-path
           ;; Otherwise append segments properly
           (str base-path
@@ -128,7 +135,7 @@
                  "/")
                (str/join "/" segments)))))))
 
-;; Returns the Authorization header value for Mailgun API requests
+;; Returns Authorization header value for Mailgun API requests
 (def get-mailgun-auth-header
   (memoize
    (fn []
@@ -138,7 +145,6 @@
            encoded-auth (.encodeToString encoder auth-bytes)]
        (str "Basic " encoded-auth)))))
 
-;; Centralized URL construction functions
 (defn get-mailgun-member-url
   "Constructs the URL for a specific member"
   [email]
@@ -150,18 +156,17 @@
 (defn get-mailgun-members-url
   "Constructs the URL for the members list"
   []
-  (format "%s/lists/%s/members"
-          mailgun-api-endpoint
-          mailgun-list-id))
+  (format "%s/lists/%s/members" mailgun-api-endpoint mailgun-list-id))
 
 (defn make-mailgun-request
   "Makes a request to the Mailgun API with appropriate authentication"
   [method url body-params]
   (let [auth-header  (get-mailgun-auth-header)
         request-opts (cond-> {:headers {"Authorization" auth-header} :throw false}
-                       body-params (assoc :headers {"Authorization" auth-header
-                                                    "Content-Type"  "application/x-www-form-urlencoded"}
-                                          :body body-params))
+                       body-params
+                       (assoc :headers {"Authorization" auth-header
+                                        "Content-Type"  "application/x-www-form-urlencoded"}
+                              :body body-params))
         http-fn      (get {:get http/get :post http/post :delete http/delete} method)]
     (try
       (http-fn url request-opts)
@@ -256,12 +261,9 @@
       (let [config-content (slurp file-path)]
         (log/info "Reading configuration from:" file-path)
         (edn/read-string {:readers {}} config-content))
-      (do
-        (log/warn "Configuration file not found:" file-path)
-        {}))
+      (log/warn "Configuration file not found:" file-path))
     (catch Exception e
-      (log/error "Error reading configuration file:" (.getMessage e))
-      {})))
+      (log/error "Error reading configuration file:" (.getMessage e)))))
 
 ;; Function to validate the configuration data
 (defn validate-config [config-data]
@@ -304,14 +306,14 @@
 ;; This gives precedence to config file values
 (defn merge-ui-strings! [config-data]
   (if-let [config-ui-strings (:ui-strings config-data)]
-    (do
-      (alter-var-root #'ui-strings
-                      (fn [original]
-                        (merge-with (fn [orig new]
-                                      (merge-with merge orig new))
-                                    original
-                                    config-ui-strings)))
-      (log/info "Merged UI strings from configuration file"))
+    (do (alter-var-root
+         #'ui-strings
+         (fn [original]
+           (merge-with (fn [orig new]
+                         (merge-with merge orig new))
+                       original
+                       config-ui-strings)))
+        (log/info "Merged UI strings from configuration file"))
     (log/info "No UI strings found in configuration file")))
 
 (defn process-config-file [file-path]
@@ -334,7 +336,6 @@
   ([lang] (get ui-strings lang (get ui-strings default-language)))
   ([] (get-strings default-language)))
 
-;; Simplified function to determine language from request - browser only
 (defn determine-language [req]
   (let [accept-language (get-in req [:headers "accept-language"] "")]
     (cond
@@ -414,7 +415,6 @@
       padding: 2rem 1rem;
       margin: 0 auto;
     }
-
     /* Responsive adjustments */
     @media (max-width: 768px) {
       .container {
@@ -488,19 +488,15 @@
           <h1>%s</h1>
           <p>%s</p>
         </header>
-
         <form hx-post=\"%s\" hx-target=\"#result\" hx-swap=\"outerHTML\" hx-indicator=\"#loading\">
           <input type=\"email\" id=\"email\" name=\"email\" placeholder=\"%s\" required>
-
           <!-- CSRF Protection -->
           <input type=\"hidden\" name=\"csrf_token\" value=\"%s\">
-
           <!-- Honeypot field - bots will fill this out, humans won't see it -->
           <div class=\"visually-hidden\">
             <label for=\"website\">%s</label>
             <input type=\"text\" id=\"website\" name=\"website\" autocomplete=\"off\">
           </div>
-
           <div class=\"grid\">
             <button type=\"submit\" name=\"action\" value=\"subscribe\" class=\"primary\">%s</button>
             <button type=\"submit\" name=\"action\" value=\"unsubscribe\" class=\"secondary\">%s</button>
@@ -509,7 +505,6 @@
         </form>
       </div>
     </article>
-
     <div id=\"result\"></div>
   </main>
 </body>
@@ -597,32 +592,26 @@
 
 (defn unsubscribe-from-mailgun [email]
   (log/info "Attempting to unsubscribe email:" email)
-
   (let [url      (get-mailgun-member-url email)
         _        (log/debug "Making DELETE request to Mailgun API:" url)
         response (make-mailgun-request :delete url nil)]
-
     (log/debug "Mailgun API unsubscribe response status:" (:status response))
     (log/debug "Mailgun API unsubscribe response body:" (:body response))
-
     (cond
       (:error response)
       {:success false
        :message "Connection error. Please try again later."
        :debug   response}
-
       (< (:status response) 300)
       (do
         (log/info "Successfully unsubscribed email:" email)
         {:success true})
-
       (= (:status response) 404)
       (do
         (log/info "Email not found for unsubscription:" email)
         {:success   false
          :not_found true
          :message   "Email address not found in subscription list."})
-
       :else
       (do
         (log/error "Failed to unsubscribe email:" email "- Status:" (:status response))
@@ -646,16 +635,13 @@
         _           (log/debug "Making request to Mailgun API:" url)
         _           (log/debug "Body:" body-params)
         response    (make-mailgun-request :post url body-params)]
-
     (log/debug "Mailgun API response status:" (:status response))
     (log/debug "Mailgun API response body:" (:body response))
-
     (cond
       (:error response)
       {:success false
        :message "Connection error. Please try again later."
        :debug   response}
-
       (< (:status response) 300)
       (let [body-str (:body response)]
         ;; Check if the response indicates the user was already subscribed
@@ -668,7 +654,6 @@
             (warn-new-subscription!)
             (log/info "Successfully subscribed email:" email)
             {:success true})))
-
       :else
       (do
         (log/error "Failed to subscribe email:" email "- Status:" (:status response))
@@ -729,12 +714,11 @@
                                (str/split body #"&"))]
             (log/debug "Parsed form data:" (pr-str result))
             result))
-        (catch Throwable t (log/error "Error reading body:" (str t)) {}))
-      (do (log/debug "No body in request") {}))
+        (catch Throwable t (log/error "Error reading body:" (str t))))
+      (log/debug "No body in request"))
     (catch Throwable t
       (log/error "Top-level error in parse-form-data:" (str t))
-      (log/error "Stack trace:" (with-out-str (.printStackTrace t)))
-      {})))
+      (log/error "Stack trace:" (with-out-str (.printStackTrace t))))))
 
 ;; Helper function to parse query params from URI (using the same robust approach)
 (defn parse-query-params [uri]
@@ -749,9 +733,8 @@
                       (assoc acc (keyword k) v)))
                   acc))
               {}
-              (str/split query-string #"&"))
-      {})
-    (catch Throwable t (log/error "Error parsing query params:" (str t)) {})))
+              (str/split query-string #"&")))
+    (catch Throwable t (log/error "Error parsing query params:" (str t)))))
 
 (defn process-subscription-action [strings action email]
   (case action
@@ -771,7 +754,6 @@
                    :operation-failed
                    (or (:message result) (get-in strings [:messages :server-error]))
                    (str "Debug info:\n" (pr-str (:debug result))))}))
-
     "unsubscribe"
     (let [result (unsubscribe-from-mailgun email)]
       (cond
@@ -864,7 +846,6 @@
               ;; Valid request, proceed with normal handling
               :else
               (process-subscription-action strings action email))))))
-
     (catch Throwable e
       (handle-error req e (str "Request method: " (name (:request-method req)) "\n"
                                "Headers: " (pr-str (:headers req)))))))
