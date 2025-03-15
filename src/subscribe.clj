@@ -44,12 +44,19 @@
          '[clojure.edn :as edn]
          '[babashka.cli :as cli])
 
+(def version "0.1")
+
+(defn print-version []
+  (println (format "subscribe %s" version))
+  (System/exit 0))
+
 (def cli-options
   {:help      {:alias :h :desc "Display help" :type :boolean}
    :config    {:alias :c :desc "Config file path" :ref "<file>"}
    :port      {:alias :p :desc "Port number" :ref "<port>" :default 8080 :coerce :int}
    :base-path {:alias :b :desc "Base path" :ref "<path>"}
-   :log-level {:alias :l :desc "Log level" :ref "<level>" :default :info}})
+   :log-level {:alias :l :desc "Log level" :ref "<level>" :default :info}
+   :version   {:alias :v :desc "Describe version" :type :boolean }})
 
 (defn print-usage []
   (println "Usage: subscribe [options]")
@@ -70,7 +77,8 @@
   (println "  subscribe -p 4444        # Run on port 4444")
   (println "  subscribe -l :debug      # Specify log level as :debug")
   (println "  subscribe -b /app        # Set base path to /app")
-  (println "  subscribe -c config.edn  # Load configuration from file"))
+  (println "  subscribe -c config.edn  # Load configuration from file")
+  (System/exit 0))
 
 ;; Defaults
 (def default-language :en)
@@ -108,14 +116,6 @@
 (def base-path
   (let [path (or (System/getenv "SUBSCRIBE_BASE_PATH") "")]
     (normalize-base-path path)))
-
-;; Log configuration
-(log/info "MAILGUN_LIST_ID=" mailgun-list-id)
-(log/info "MAILGUN_API_ENDPOINT=" mailgun-api-endpoint)
-(when (not-empty base-path) (log/info "SUBSCRIBE_BASE_PATH=" base-path))
-(if (not-empty mailgun-api-key)
-  (log/info "MAILGUN_API_KEY=****")
-  (log/error "MAILGUN_API_KEY not set"))
 
 ;; Helper function to construct paths with the base path
 (defn make-path [& segments]
@@ -917,10 +917,16 @@
 (when (= *file* (System/getProperty "babashka.file"))
   (let [opts (cli/parse-opts *command-line-args* {:spec cli-options})
         port (get opts :port 8080)]
-    ;; Handle help option
-    (when (:help opts)
-      (print-usage)
-      (System/exit 0))
+    ;; Handle help and version option
+    (when (:help opts) (print-usage))
+    (when (:version opts) (print-version))
+    ;; Log configuration
+    (log/info "MAILGUN_LIST_ID=" mailgun-list-id)
+    (log/info "MAILGUN_API_ENDPOINT=" mailgun-api-endpoint)
+    (when (not-empty base-path) (log/info "SUBSCRIBE_BASE_PATH=" base-path))
+    (if (not-empty mailgun-api-key)
+      (log/info "MAILGUN_API_KEY=****")
+      (log/error "MAILGUN_API_KEY not set"))
     ;; Configure Timbre logging
     (when-let [log-level (get opts :log-level)]
       (log/merge-config! {:min-level log-level})

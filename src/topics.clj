@@ -28,44 +28,31 @@
          '[babashka.cli :as cli]
          '[taoensso.timbre :as log])
 
+(def version "0.1")
+
+(defn print-version []
+  (println (format "topics %s" version))
+  (System/exit 0))
+
 ;; Define CLI specs
 (def cli-options
-  {:port      {:desc    "Port number for server"
-               :default 8080
-               :alias   :p
-               :coerce  :int}
-   :topics    {:desc    "Path to Topics JSON file"
-               :alias   :f
-               :default "topics.json"}
-   :source    {:desc    "Path to the Topics source"
-               :alias   :s
-               :default "https://github.com/bzg/utils"}
-   :title     {:desc    "Website title"
-               :alias   :t
-               :default "Topics"}
-   :tagline   {:desc    "Website tagline"
-               :alias   :T
-               :default "A few topics to explore"}
-   :footer    {:desc    "Footer text"
-               :alias   :F
-               :default "https://github.com/bzg/utils"}
-   :base-path {:desc    "Base path for subdirectory deployment (e.g., /topics)"
-               :alias   :b
-               :default ""}
-   :help      {:desc   "Show help"
-               :alias  :h
-               :coerce :boolean}
-   :log-level {:alias   :l
-               :desc    "Set log level (debug, info, warn, error)"
-               :ref     "<level>"
-               :default :info}})
+  {:base-path {:desc "Base path for subdirectory deployment (e.g., /topics)" :alias :b :default ""}
+   :footer    {:desc "Footer text" :alias :F :default "https://github.com/bzg/utils"}
+   :help      {:desc "Show help" :alias :h :type :boolean}
+   :log-level {:alias :l :desc "Set log level (debug, info, warn, error)" :ref "<level>" :default :info}
+   :port      {:desc "Port number for server" :default 8080 :alias :p :coerce :int}
+   :source    {:desc "Path to the Topics source" :alias :s :default "https://github.com/bzg/utils"}
+   :tagline   {:desc "Website tagline" :alias :T :default "A few topics to explore"}
+   :title     {:desc "Website title" :alias :t :default "Topics"}
+   :topics    {:desc "Path to Topics JSON file" :alias :f :default "topics.json"}
+   :version   {:desc "Show version" :alias :v :type :boolean}})
 
 (defn with-base-path [path base-path]
   (str (str/replace base-path #"/$" "") path))
 
 ;; Safely encode URL components to handle special characters
-(defn safe-url-encode [s]
-  (when s
+(defn safe-url-encode [^String s]
+  (when (not-empty s)
     (-> s
         (java.net.URLEncoder/encode "UTF-8")
         (str/replace "+" "%20")  ;; Replace + with %20 for spaces
@@ -74,8 +61,8 @@
         (str/replace "%2C" ","))))
 
 ;; Safely decode URL components
-(defn safe-url-decode [s]
-  (when s
+(defn safe-url-decode [^String s]
+  (when (not-empty s)
     (try
       (java.net.URLDecoder/decode s "UTF-8")
       (catch Exception _
@@ -91,8 +78,7 @@
       (log/info "Loaded" (count data) "Topics items")
       data)
     (catch Exception e
-      (log/error "Error loading Topics data from" source ":" (.getMessage e))
-      [])))
+      (log/error "Error loading Topics data from" source ":" (.getMessage e)))))
 
 ;; Helper function to strip HTML tags for text content searching
 (defn strip-html [html]
@@ -396,9 +382,8 @@
   (try
     ;; Parse command line arguments with simplified handling
     (let [opts (cli/parse-opts *command-line-args* {:spec cli-options})]
-      ;; Show help if requested
       (when (:help opts) (show-help))
-      ;; Configure Timbre logging
+      (when (:version opts) (print-version))
       (log/merge-config! {:min-level (:log-level opts)})
       ;; Load Topics data
       (let [topics-data (load-topics-data (:topics opts))]
