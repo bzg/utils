@@ -646,17 +646,9 @@
        :message "Connection error. Please try again later."
        :debug   response}
       (< (:status response) 300)
-      (let [body-str (:body response)]
-        ;; Check if the response indicates the user was already subscribed
-        (if (and body-str (re-find #"already_subscribed|already exists" body-str))
-          (do
-            (log/info "Email already subscribed:" email)
-            {:success            true
-             :already_subscribed true})
-          (do
-            (warn-new-subscription!)
-            (log/info "Successfully subscribed email:" email)
-            {:success true})))
+      (do (warn-new-subscription!)
+          (log/info "Successfully subscribed email:" email)
+          {:success true})
       :else
       (do
         (log/error "Failed to subscribe email:" email "- Status:" (:status response))
