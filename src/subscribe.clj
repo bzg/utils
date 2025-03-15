@@ -44,19 +44,20 @@
          '[clojure.edn :as edn]
          '[babashka.cli :as cli])
 
-(def version "0.3")
+(def version "0.3.1")
 
 (defn print-version []
   (println (format "subscribe %s" version))
   (System/exit 0))
 
 (def cli-options
-  {:help      {:alias :h :desc "Display help" :type :boolean}
-   :config    {:alias :c :desc "Config file path" :ref "<file>"}
+  {:help      {:alias :h :desc "Display help"}
+   :config    {:alias :c :desc "Config file path" :ref "<file>" :coerce :string}
    :port      {:alias :p :desc "Port number" :ref "<port>" :default 8080 :coerce :int}
-   :base-path {:alias :b :desc "Base path" :ref "<path>"}
-   :log-level {:alias :l :desc "Log level" :ref "<level>" :default :info}
-   :version   {:alias :v :desc "Describe version" :type :boolean }})
+   :base-path {:alias :b :desc "Base path" :ref "<path>" :coerce :string}
+   :log-level {:alias :l :desc "Log level" :ref "<level>" :default :info :coerce :keyword}
+   :log-file  {:alias :L :desc "Log file" :ref "<file-name>" :coerce :string}
+   :version   {:alias :v :desc "Describe version"}})
 
 (defn print-usage []
   (println "Usage: subscribe [options]")
@@ -76,6 +77,7 @@
   (println "  subscribe                # Run on default port 8080")
   (println "  subscribe -p 4444        # Run on port 4444")
   (println "  subscribe -l :debug      # Specify log level as :debug")
+  (println "  subscribe -L log.txt     # Specify a log file name")
   (println "  subscribe -b /app        # Set base path to /app")
   (println "  subscribe -c config.edn  # Load configuration from file")
   (System/exit 0))
@@ -919,10 +921,11 @@
       (log/info "MAILGUN_API_KEY=****")
       (log/error "MAILGUN_API_KEY not set"))
     ;; Configure Timbre logging
-    (log/merge-config!
-     {:min-level (get opts :log-level :info)
-      :appenders {:println (log/println-appender {:stream :auto})
-                  :spit    (log/spit-appender {:fname "log_subscribe.txt"})}})
+    (let [appenders (merge {:println (log/println-appender {:stream :auto})}
+                           (when-let [f (get opts :log-file)]
+                             {:spit (log/spit-appender {:fname f})}))]
+      (log/merge-config!
+       {:min-level (get opts :log-level) :appenders appenders}))
     ;; Set base-path from command line if provided
     (when-let [path (:base-path opts)]
       (alter-var-root #'base-path (constantly (normalize-base-path path)))
