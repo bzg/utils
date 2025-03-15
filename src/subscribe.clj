@@ -112,8 +112,10 @@
 ;; Log configuration
 (log/info "MAILGUN_LIST_ID=" mailgun-list-id)
 (log/info "MAILGUN_API_ENDPOINT=" mailgun-api-endpoint)
-(log/info "MAILGUN_API_KEY=" (if mailgun-api-key "****" "Not set"))
-(log/info "SUBSCRIBE_BASE_PATH=" (if (str/blank? base-path) "[not set]" base-path))
+(when (not-empty base-path) (log/info "SUBSCRIBE_BASE_PATH=" base-path))
+(if (not-empty mailgun-api-key)
+  (log/info "MAILGUN_API_KEY=****")
+  (log/error "MAILGUN_API_KEY not set"))
 
 ;; Helper function to construct paths with the base path
 (defn make-path [& segments]
@@ -893,7 +895,7 @@
         [:get "/debug"]      (handle-debug req-with-params)
         [:get "/robots.txt"] (handle-robots-txt)
         (do
-          (log/info "Not found:" (:request-method req) uri)
+          (log/debug "Not found:" (:request-method req) uri)
           {:status  404
            :headers (merge {"Content-Type" "text/html; charset=UTF-8"}
                            security-headers-self)
