@@ -44,7 +44,7 @@
          '[clojure.edn :as edn]
          '[babashka.cli :as cli])
 
-(def version "0.1")
+(def version "0.1.1")
 
 (defn print-version []
   (println (format "subscribe %s" version))
