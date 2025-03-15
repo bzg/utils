@@ -85,7 +85,7 @@
 
 ;; Anti-Spam protections
 (def rate-limit-window (* 60 60 1000)) ;; 1 hour in milliseconds
-(def max-requests-per-window 5) ;; Maximum 5 requests per IP per hour
+(def max-requests-per-window 10) ;; Maximum 10 requests per IP per hour
 (def ip-request-log (atom {}))
 (def last-pruned-time (atom (System/currentTimeMillis)))
 
