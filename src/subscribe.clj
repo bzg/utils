@@ -204,9 +204,9 @@
 (def ui-strings
   {:en
    {:page
-    {:title      "Email subscription"
+    {:title      "Mailing list subscription"
      :heading    "Subscribe to our mailing list"
-     :subheading "Join our community to receive updates and news"}
+     :subheading "Join our mailing list to receive updates and news"}
     :form
     {:email-placeholder  "you@example.com"
      :website-label      "Website (leave this empty)"
@@ -214,13 +214,13 @@
      :unsubscribe-button "Unsubscribe"}
     :messages
     {:thank-you                  "Thank you!"
-     :success-subscribe          "Your email <strong>%s</strong> has been successfully subscribed to our mailing list."
+     :success-subscribe          "Your email <strong>%s</strong> has been successfully subscribed."
      :already-subscribed         "Already subscribed"
-     :already-subscribed-message "The email <strong>%s</strong> is already subscribed to our mailing list."
+     :already-subscribed-message "The email <strong>%s</strong> is already subscribed."
      :unsubscribed               "Successfully unsubscribed"
-     :unsubscribed-message       "The email <strong>%s</strong> has been unsubscribed from our mailing list."
+     :unsubscribed-message       "The email <strong>%s</strong> has been unsubscribed."
      :not-subscribed             "Warning: not subscribed"
-     :not-subscribed-message     "The email <strong>%s</strong> is not currently subscribed to our mailing list. No action was taken."
+     :not-subscribed-message     "The email <strong>%s</strong> is not currently subscribed. No action was taken."
      :operation-failed           "Operation failed"
      :no-email                   "No email address provided. Please try again."
      :no-email-debug             "Missing email address in form submission."
