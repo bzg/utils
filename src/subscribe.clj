@@ -44,7 +44,7 @@
          '[clojure.edn :as edn]
          '[babashka.cli :as cli])
 
-(def version "0.2")
+(def version "0.3")
 
 (defn print-version []
   (println (format "subscribe %s" version))
@@ -195,11 +195,6 @@
         (log/debug "Generated new CSRF token for IP" ip ":" token)
         token)))
 
-;; Extract CSRF token from cookies - kept for backward compatibility
-(defn extract-csrf-from-cookie [cookies]
-  (when-let [cookie-str cookies]
-    (some->> (re-find #"csrf_token=([^;]+)" cookie-str) second)))
-
 ;; UI Strings with internationalization (i18n) support
 (def ui-strings
   {:en
@@ -267,7 +262,6 @@
      :unknown-action             "Action inconnue demandée. Veuillez réessayer."
      :server-error               "Une erreur inattendue s'est produite. Veuillez réessayer plus tard."}}})
 
-;; Function to read EDN configuration file
 (defn read-config-file [file-path]
   (try
     (if (.exists (java.io.File. file-path))
@@ -278,7 +272,6 @@
     (catch Exception e
       (log/error "Error reading configuration file:" (.getMessage e)))))
 
-;; Function to validate the configuration data
 (defn validate-config [config-data]
   (let [and-not   #(when-let [r (get config-data %1)] (not (apply %2 [r])))
         log-false #(do (log/error %) false)]
@@ -315,19 +308,15 @@
     (alter-var-root #'base-path (constantly (normalize-base-path path)))
     (log/info "Overriding base-path from config:" path)))
 
-;; Function to merge UI strings from configuration with defaults
-;; This gives precedence to config file values
 (defn merge-ui-strings! [config-data]
-  (if-let [config-ui-strings (:ui-strings config-data)]
-    (do (alter-var-root
-         #'ui-strings
-         (fn [original]
-           (merge-with (fn [orig new]
-                         (merge-with merge orig new))
-                       original
-                       config-ui-strings)))
-        (log/info "Merged UI strings from configuration file"))
-    (log/info "No UI strings found in configuration file")))
+  (when-let [config-ui-strings (:ui-strings config-data)]
+    (alter-var-root
+     #'ui-strings
+     (fn [original]
+       (merge-with (fn [orig new] (merge-with merge orig new))
+                   original
+                   config-ui-strings)))
+    (log/info "Merged UI strings from configuration file")))
 
 (defn process-config-file [file-path]
   (when file-path
@@ -398,7 +387,6 @@
 (defn honeypot-filled? [form-data]
   (not (str/blank? (str (:website form-data)))))
 
-;; Add HTML escaping function for XSS protection
 (defn escape-html [^String s]
   (when (not-empty s)
     (-> s
@@ -687,7 +675,6 @@
     (log/debug "Normalized URI from" uri "to" uri-without-base)
     uri-without-base))
 
-;; Request handlers - modified to use session-based CSRF
 (defn handle-index [req]
   (let [lang       (determine-language req)
         strings    (get-strings lang)
@@ -706,7 +693,7 @@
       (try
         (let [body (slurp body-stream)]
           (log/debug "Raw body content:" body)
-          ;; Parse the body in the most robust way possible
+          ;; Parse the body
           (let [result (reduce (fn [acc pair]
                                  (if-let [[_ k v] (re-matches #"([^=]+)=(.*)" pair)]
                                    (try
@@ -725,10 +712,10 @@
       (log/error "Top-level error in parse-form-data:" (str t))
       (log/error "Stack trace:" (with-out-str (.printStackTrace t))))))
 
-;; Helper function to parse query params from URI (using the same robust approach)
+;; Helper function to parse query params from URI
 (defn parse-query-params [uri]
   (try
-    (if-let [query-string (second (str/split uri #"\?"))]
+    (when-let [query-string (second (str/split uri #"\?"))]
       (reduce (fn [acc pair]
                 (if-let [[_ k v] (re-matches #"([^=]+)=(.*)" pair)]
                   (try
@@ -778,9 +765,7 @@
     ;; Default case for unknown action
     (make-response 400 "error" strings :unknown-action :unknown-action)))
 
-;; Handle subscription with session-based CSRF validation
 (defn handle-subscribe [req]
-  (log/info "Received subscription request")
   (log/debug "Request method:" (:request-method req))
   (log/debug "Headers:" (pr-str (:headers req)))
   (try
@@ -855,9 +840,8 @@
       (handle-error req e (str "Request method: " (name (:request-method req)) "\n"
                                "Headers: " (pr-str (:headers req)))))))
 
-;; Debug endpoint - updated to include session info
+;; Debug endpoint
 (defn handle-debug [req]
-  (log/info "Serving debug page")
   (let [lang      (determine-language req)
         client-ip (get-client-ip req)
         debug-info
@@ -935,9 +919,10 @@
       (log/info "MAILGUN_API_KEY=****")
       (log/error "MAILGUN_API_KEY not set"))
     ;; Configure Timbre logging
-    (when-let [log-level (get opts :log-level)]
-      (log/merge-config! {:min-level log-level})
-      (log/info "Setting log-level from command line:" log-level))
+    (log/merge-config!
+     {:min-level (get opts :log-level :info)
+      :appenders {:println (log/println-appender {:stream :auto})
+                  :spit    (log/spit-appender {:fname "log_subscribe.txt"})}})
     ;; Set base-path from command line if provided
     (when-let [path (:base-path opts)]
       (alter-var-root #'base-path (constantly (normalize-base-path path)))
