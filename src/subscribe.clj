@@ -11,7 +11,7 @@
 ;;
 ;; export MAILGUN_LIST_ID="my@list.com"
 ;; export MAILGUN_API_ENDPOINT="https://api.eu.mailgun.net/v3"
-;; export MAILGUN_API_KEY="xxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
+;; export MAILGUN_API_KEY="xxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
 ;;
 ;; By default, the application runs on http://localhost:8080:
 ;;
@@ -44,7 +44,7 @@
          '[clojure.edn :as edn]
          '[babashka.cli :as cli])
 
-(def version "0.1.1")
+(def version "0.2")
 
 (defn print-version []
   (println (format "subscribe %s" version))
@@ -88,6 +88,9 @@
 (def max-requests-per-window 10) ;; Maximum 10 requests per IP per hour
 (def ip-request-log (atom {}))
 (def last-pruned-time (atom (System/currentTimeMillis)))
+
+;; Session store for CSRF tokens
+(def session-store (atom {}))
 
 ;; Set up environment variables
 (def mailgun-list-id
@@ -184,7 +187,15 @@
     (.nextBytes (java.security.SecureRandom.) random-bytes)
     (.encodeToString (java.util.Base64/getEncoder) random-bytes)))
 
-;; Extract CSRF token from cookies
+;; Get or create a token for a session
+(defn get-or-create-csrf-token [ip]
+  (or (get @session-store ip)
+      (let [token (generate-csrf-token)]
+        (swap! session-store assoc ip token)
+        (log/debug "Generated new CSRF token for IP" ip ":" token)
+        token)))
+
+;; Extract CSRF token from cookies - kept for backward compatibility
 (defn extract-csrf-from-cookie [cookies]
   (when-let [cookie-str cookies]
     (some->> (re-find #"csrf_token=([^;]+)" cookie-str) second)))
@@ -388,10 +399,8 @@
   (not (str/blank? (str (:website form-data)))))
 
 ;; Add HTML escaping function for XSS protection
-(defn escape-html
-  "Escape HTML special characters in a string to prevent XSS attacks."
-  [s]
-  (when s
+(defn escape-html [^String s]
+  (when (not-empty s)
     (-> s
         (str/replace "&" "&amp;")
         (str/replace "<" "&lt;")
@@ -678,18 +687,15 @@
     (log/debug "Normalized URI from" uri "to" uri-without-base)
     uri-without-base))
 
-;; Request handlers
+;; Request handlers - modified to use session-based CSRF
 (defn handle-index [req]
   (let [lang       (determine-language req)
         strings    (get-strings lang)
-        csrf-token (generate-csrf-token)]
+        client-ip  (get-client-ip req)
+        csrf-token (get-or-create-csrf-token client-ip)]
+    (log/debug "Using CSRF token for IP" client-ip ":" csrf-token)
     {:status  200
-     :headers (merge {"Content-Type" "text/html; charset=UTF-8"
-                      "Set-Cookie"
-                      (format "csrf_token=%s; Path=%s; HttpOnly; SameSite=Strict"
-                              csrf-token
-                              (if (str/blank? base-path) "/" base-path))}
-                     security-headers)
+     :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
      :body    (build-index-html strings lang csrf-token)}))
 
 (defn parse-form-data [request]
@@ -772,35 +778,35 @@
     ;; Default case for unknown action
     (make-response 400 "error" strings :unknown-action :unknown-action)))
 
-;; Handle subscription with robust form data parsing
+;; Handle subscription with session-based CSRF validation
 (defn handle-subscribe [req]
   (log/info "Received subscription request")
   (log/debug "Request method:" (:request-method req))
   (log/debug "Headers:" (pr-str (:headers req)))
   (try
-    (let [form-data         (parse-form-data req)
-          email             (-> (:email form-data) str/trim str/lower-case)
-          action            (or (:action form-data) "subscribe")
-          client-ip         (get-client-ip req)
-          lang              (determine-language req)
-          strings           (get-strings lang)
-          form-csrf-token   (:csrf_token form-data)
-          cookie-csrf-token (extract-csrf-from-cookie (get-in req [:headers "cookie"]))]
+    (let [form-data       (parse-form-data req)
+          email           (-> (:email form-data) str/trim str/lower-case)
+          action          (or (:action form-data) "subscribe")
+          client-ip       (get-client-ip req)
+          lang            (determine-language req)
+          strings         (get-strings lang)
+          form-csrf-token (:csrf_token form-data)
+          session-token   (get @session-store client-ip)]
 
       (log/debug "Parsed form data:" (pr-str form-data))
       (log/debug "Email from form:" email)
       (log/debug "Action from form:" action)
       (log/debug "CSRF token from form:" form-csrf-token)
-      (log/debug "CSRF token from cookie:" cookie-csrf-token)
+      (log/debug "Session CSRF token:" session-token)
 
       ;; CSRF Protection check
       (if (or (nil? form-csrf-token)
-              (nil? cookie-csrf-token)
-              (not= form-csrf-token cookie-csrf-token))
+              (nil? session-token)
+              (not= form-csrf-token session-token))
         (do
           (log/warn "CSRF token validation failed")
           (log/warn "Form token:" form-csrf-token)
-          (log/warn "Cookie token:" cookie-csrf-token)
+          (log/warn "Session token:" session-token)
           (make-response 403 "error" strings :csrf-invalid :csrf-invalid-message))
 
         ;; Anti-spam: rate limiting
@@ -849,23 +855,28 @@
       (handle-error req e (str "Request method: " (name (:request-method req)) "\n"
                                "Headers: " (pr-str (:headers req)))))))
 
-;; Debug endpoint
+;; Debug endpoint - updated to include session info
 (defn handle-debug [req]
   (log/info "Serving debug page")
-  (let [lang       (determine-language req)
-        debug-info {:env        {:mailgun-list-id      mailgun-list-id
-                                 :mailgun-api-endpoint mailgun-api-endpoint
-                                 :mailgun-api-key      "****"
-                                 :base-path            base-path}
-                    :i18n       {:current-language    (name lang)
-                                 :available-languages (keys ui-strings)
-                                 :browser-language    (get-in req [:headers "accept-language"])}
-                    :req        {:uri     (:uri req)
-                                 :method  (:request-method req)
-                                 :headers (:headers req)}
-                    :rate-limit {:window-length (str (/ rate-limit-window 1000) " seconds")
-                                 :max-requests  max-requests-per-window
-                                 :current-log   (count @ip-request-log)}}]
+  (let [lang      (determine-language req)
+        client-ip (get-client-ip req)
+        debug-info
+        {:env        {:mailgun-list-id      mailgun-list-id
+                      :mailgun-api-endpoint mailgun-api-endpoint
+                      :mailgun-api-key      "****"
+                      :base-path            base-path}
+         :i18n       {:current-language    (name lang)
+                      :available-languages (keys ui-strings)
+                      :browser-language    (get-in req [:headers "accept-language"])}
+         :session    {:client-ip     client-ip
+                      :csrf-token    (get @session-store client-ip)
+                      :session-count (count @session-store)}
+         :req        {:uri     (:uri req)
+                      :method  (:request-method req)
+                      :headers (:headers req)}
+         :rate-limit {:window-length (str (/ rate-limit-window 1000) " seconds")
+                      :max-requests  max-requests-per-window
+                      :current-log   (count @ip-request-log)}}]
     {:status  200
      :headers (merge {"Content-Type" "application/json; charset=UTF-8"}
                      security-headers-self)
