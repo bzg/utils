@@ -632,31 +632,35 @@
 
 (defn subscribe-to-mailgun [email]
   (log/info "Attempting to subscribe email:" email)
-  (let [url         (get-mailgun-members-url)
-        body-params (format "address=%s&subscribed=yes&upsert=yes"
-                            (java.net.URLEncoder/encode email "UTF-8"))
-        _           (log/debug "Making request to Mailgun API:" url)
-        _           (log/debug "Body:" body-params)
-        response    (make-mailgun-request :post url body-params)]
-    (log/debug "Mailgun API response status:" (:status response))
-    (log/debug "Mailgun API response body:" (:body response))
-    (cond
-      (:error response)
-      {:success false
-       :message "Connection error. Please try again later."
-       :debug   response}
-      (< (:status response) 300)
-      (do (warn-new-subscription!)
-          (log/info "Successfully subscribed email:" email)
-          {:success true})
-      :else
-      (do
-        (log/error "Failed to subscribe email:" email "- Status:" (:status response))
-        (log/error "Error response:" (:body response))
+  (if (check-if-subscribed email)
+    ;; Already subscribed case
+    {:success true, :already_subscribed true}
+    ;; Not subscribed yet - proceed with subscription
+    (let [url         (get-mailgun-members-url)
+          body-params (format "address=%s&subscribed=yes&upsert=yes"
+                              (java.net.URLEncoder/encode email "UTF-8"))
+          _           (log/debug "Making request to Mailgun API:" url)
+          _           (log/debug "Body:" body-params)
+          response    (make-mailgun-request :post url body-params)]
+      (log/debug "Mailgun API response status:" (:status response))
+      (log/debug "Mailgun API response body:" (:body response))
+      (cond
+        (:error response)
         {:success false
-         :message "Failed to subscribe. Please try again later."
-         :debug   {:status (:status response)
-                   :body   (:body response)}}))))
+         :message "Connection error. Please try again later."
+         :debug   response}
+        (< (:status response) 300)
+        (do (warn-new-subscription!)
+            (log/info "Successfully subscribed email:" email)
+            {:success true})
+        :else
+        (do
+          (log/error "Failed to subscribe email:" email "- Status:" (:status response))
+          (log/error "Error response:" (:body response))
+          {:success false
+           :message "Failed to subscribe. Please try again later."
+           :debug   {:status (:status response)
+                     :body   (:body response)}})))))
 
 (defn normalize-uri [uri]
   (let [uri-without-base
