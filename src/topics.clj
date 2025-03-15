@@ -162,10 +162,8 @@
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
   <title>" page-title " - " title "</title>
-
-  <!-- Pico.css 2.0 -->
+  <link rel=\"icon\" href=\"data:image/png;base64,iVBORw0KGgo=\">
   <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css\">
-
   <style>
   /* Custom styles */
   .container {max-width: 1200px; margin: 0 auto; padding: 0 1rem;}
