@@ -556,7 +556,7 @@
 (def security-headers
   {"X-Content-Type-Options"  "nosniff"
    "X-Frame-Options"         "DENY"
-   "Content-Security-Policy" "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;"})
+   "Content-Security-Policy" "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:;"})
 
 (def security-headers-self
   {"X-Content-Type-Options"  "nosniff"
