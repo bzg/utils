@@ -53,7 +53,7 @@
 ;;
 ;; ~$ subscribe -h # Show more information
 
-(def version "0.5.0")
+(def version "0.5.1")
 
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
@@ -1098,7 +1098,7 @@
         (catch Exception e
           (log/error "Form parsing error:" (.getMessage e)))))))
 
-(defn parse-query-params [uri]
+(defn parse-query-params-0 [uri]
   (try
     (when (and uri (string? uri) (str/includes? uri "?"))
       (let [query-string (second (str/split uri #"\?"))]
@@ -1129,26 +1129,26 @@
       (log/error "Error parsing query params:" t)
       (log/error "URI that caused error:" uri))))
 
-(defn enhanced-parse-query-params [req]
+(defn parse-query-params [req]
   (try
     (let [existing-params (:query-params req)
           uri             (get req :uri "")
-          uri-params      (parse-query-params uri)]
+          uri-params      (parse-query-params-0 uri)]
       (log/debug "Existing params in request:" (pr-str existing-params))
       (log/debug "URI-parsed params:" (pr-str uri-params))
       (cond
-        ;; Use existing params if available
-        (and existing-params (not-empty existing-params))
+        ;; Use existing params if available (ensure it's a collection first)
+        (and existing-params (map? existing-params) (not-empty existing-params))
         existing-params
         ;; Next try URI params
-        (not-empty uri-params)
+        (and uri-params (map? uri-params) (not-empty uri-params))
         uri-params
         ;; Finally, try to extract from query-string directly
         :else
         (let [query-string (get req :query-string)]
           (when (and query-string (not (str/blank? query-string)))
             (log/debug "Trying query-string directly:" query-string)
-            (let [params (parse-query-params (str "?" query-string))]
+            (let [params (parse-query-params-0 (str "?" query-string))]
               (log/debug "Parsed from query-string:" (pr-str params))
               params)))))
     (catch Throwable t
@@ -1319,7 +1319,7 @@
 (defn app [req]
   (let [uri             (:uri req)
         normalized-uri  (normalize-uri uri)
-        query-params    (enhanced-parse-query-params req)
+        query-params    (parse-query-params req)
         req-with-params (assoc req :query-params query-params)]
     (try
       (log/debug "Processing request:" (:request-method req) uri)
