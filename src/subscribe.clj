@@ -12,6 +12,7 @@
 ;; export MAILGUN_API_KEY="xxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx"
 ;; export MAILGUN_API_ENDPOINT="https://api.eu.mailgun.net/v3"
 ;; export MAILGUN_LIST_ID="my@list.com"
+;; export MAILGUN_LIST_NAME="My Newsletter"
 ;;
 ;; For double opt-in email sending:
 ;;
@@ -40,6 +41,7 @@
 ;; - ui-strings
 ;; - mailgun-api-endpoint
 ;; - mailgun-list-id
+;; - mailgun-list-name
 ;; - base-url
 ;; - base-path
 ;; - subscribe-smtp-host
@@ -50,7 +52,7 @@
 ;;
 ;; ~$ subscribe -h # Show more information
 
-(def version "0.4.0")
+(def version "0.5.0")
 
 (require '[org.httpkit.server :as server]
          '[babashka.http-client :as http]
@@ -78,7 +80,7 @@
   {:help      {:alias :h :desc "Display help"}
    :version   {:alias :v :desc "Describe version"}
    :port      {:alias :p :desc "Port number" :default 8080 :coerce :int}
-   :base-path {:alias :p :desc "Base path" :coerce :string}
+   :base-path {:alias :b :desc "Base path" :coerce :string}
    :base-url  {:alias :u :desc "Base URL for confirmation links (no port)" :coerce :string}
    :log-level {:alias :l :desc "Log level (debug, info, warn, error)" :default "info" :coerce :string}
    :config    {:alias :C :desc "Config file path" :coerce :string}
@@ -130,8 +132,9 @@
          #(not (re-find #"\.{2,}|@{2,}|\_{2,}|\-{2,}" %))))
 
 (s/def ::ui-strings map?)
-(s/def ::mailgun-list-id string?)
-(s/def ::mailgun-api-endpoint string?)
+(s/def ::mailgun-list-name string?)
+(s/def ::mailgun-list-id (s/and string? #(not (re-find #"\s" %))))
+(s/def ::mailgun-api-endpoint (s/and string? #(not (re-find #"\s" %))))
 (s/def ::base-path string?)
 (s/def ::smtp-config
   (s/keys :req [::subscribe-smtp-host ::subscribe-smtp-port
@@ -141,6 +144,7 @@
 (s/def ::config
   (s/keys :opt-un [::ui-strings
                    ::mailgun-list-id
+                   ::mailgun-list-name
                    ::mailgun-api-endpoint
                    ::base-path
                    ::base-url]
@@ -277,7 +281,7 @@
      :unsubscription-confirmation-success         "Unsubscription confirmed"
      :unsubscription-confirmation-success-message "Your unsubscription request for <strong>%s</strong> has been processed."}
     :emails
-    {:confirm-subject               "Please confirm your subscription"
+    {:confirm-subject               "[%s] Please confirm your request"
      :confirm-body-text             "Thank you for subscribing to our mailing list with your email address: %s.\n\nPlease confirm your subscription by clicking on this link:\n\n%s\n\nIf you did not request this subscription, you can ignore this email."
      :confirm-body-html             "<html><body><p>Thank you for subscribing to our mailing list with your email address: <strong>%s</strong>.</p><p>Please confirm your subscription by clicking on the following link:</p><p><a href=\"%s\">Confirm your subscription</a></p><p>If you did not request this subscription, you can ignore this email.</p></body></html>"
      :unsubscribe-confirm-subject   "Please confirm your unsubscription"
@@ -299,7 +303,7 @@
      :success-subscribe                           "Votre adresse e-mail <strong>%s</strong> a été abonnée avec succès."
      :already-subscribed                          "Déjà abonné"
      :already-subscribed-message                  "L'adresse e-mail <strong>%s</strong> est déjà abonnée."
-     :not-subscribed                              "Attention : non abonné"
+     :not-subscribed                              "Attention : non abonné"
      :not-subscribed-message                      "L'adresse e-mail <strong>%s</strong> n'est pas actuellement abonnée. Aucune action n'a été effectuée."
      :operation-failed                            "Échec de l'opération"
      :no-email                                    "Aucune adresse e-mail fournie. Veuillez réessayer."
@@ -329,15 +333,16 @@
      :unsubscription-confirmation-success         "Désabonnement confirmé"
      :unsubscription-confirmation-success-message "Votre demande de désabonnement pour <strong>%s</strong> a été traitée."}
     :emails
-    {:confirm-subject               "Veuillez confirmer votre abonnement"
-     :confirm-body-text             "Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : %s.\n\nVeuillez confirmer votre abonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail."
-     :confirm-body-html             "<html><body><p>Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre abonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre abonnement</a></p><p>Si vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail.</p></body></html>"
+    {:confirm-subject               "[%s] Veuillez confirmer votre demande"
+     :confirm-body-text             "Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : %s.\n\nVeuillez confirmer votre abonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail."
+     :confirm-body-html             "<html><body><p>Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre abonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre abonnement</a></p><p>Si vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail.</p></body></html>"
      :unsubscribe-confirm-subject   "Veuillez confirmer votre désabonnement"
-     :unsubscribe-confirm-body-text "Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : %s.\n\nVeuillez confirmer votre désabonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail."
-     :unsubscribe-confirm-body-html "<html><body><p>Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre désabonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre désabonnement</a></p><p>Si vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail.</p></body></html>"}}})
+     :unsubscribe-confirm-body-text "Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : %s.\n\nVeuillez confirmer votre désabonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail."
+     :unsubscribe-confirm-body-html "<html><body><p>Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre désabonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre désabonnement</a></p><p>Si vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail.</p></body></html>"}}})
 
 (def app-config
   (atom {:mailgun-list-id      (System/getenv "MAILGUN_LIST_ID")
+         :mailgun-list-name    (System/getenv "MAILGUN_LIST_NAME")
          :mailgun-api-endpoint (or (System/getenv "MAILGUN_API_ENDPOINT")
                                    "https://api.mailgun.net/v3")
          :mailgun-api-key      (System/getenv "MAILGUN_API_KEY")
@@ -714,16 +719,18 @@
             smtp-user (config :subscribe-smtp-user)
             smtp-pass (config :subscribe-smtp-pass)]
         (if (and smtp-host smtp-port smtp-user smtp-pass)
-          (let [result (mail/send-mail
-                        {:from     from
-                         :to       [email]
-                         :subject  subject
-                         :text     (format body-text email confirm-url)
-                         :html     (format body-html email confirm-url)
-                         :host     smtp-host
-                         :port     (Integer/parseInt (or smtp-port "587"))
-                         :username smtp-user
-                         :password smtp-pass})]
+          (let [list-description (or (not-empty (config :mailgun-list-name))
+                                     (config :mailgun-list-id))
+                result           (mail/send-mail
+                                  {:from     from
+                                   :to       [email]
+                                   :subject  (format subject list-description)
+                                   :text     (format body-text email confirm-url)
+                                   :html     (format body-html email confirm-url)
+                                   :host     smtp-host
+                                   :port     (Integer/parseInt (or smtp-port "587"))
+                                   :username smtp-user
+                                   :password smtp-pass})]
             (log/debug "Sending email result:" result)
             (log/info (str (name action) " confirmation email sent to") email)
             {:success true})
@@ -1360,6 +1367,7 @@
       (update-config-from-file! config-path))
     ;; Log configuration state after all updates
     (log/info "MAILGUN_LIST_ID=" (config :mailgun-list-id))
+    (log/info "MAILGUN_LIST_NAME=" (config :mailgun-list-name))
     (log/info "MAILGUN_API_ENDPOINT=" (config :mailgun-api-endpoint))
     (when (not-empty (config :base-path))
       (log/info "SUBSCRIBE_BASE_PATH=" (config :base-path)))
