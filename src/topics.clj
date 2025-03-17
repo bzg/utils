@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-;; Copyright (c) DINUM, Bastien Guerry
+;; Copyright (c) Bastien Guerry
 ;; SPDX-License-Identifier: EPL-2.0
 ;; License-Filename: EPL-2.0.txt
 
@@ -66,8 +66,7 @@
     (try
       (java.net.URLDecoder/decode s "UTF-8")
       (catch Exception _
-        (log/warn "Error decoding URL parameter:" s)
-        s))))  ;; Return original on error
+        (log/warn "Error decoding URL parameter:" s)))))
 
 ;; Load Topics data directly
 (defn load-topics-data [source]
@@ -81,26 +80,27 @@
       (log/error "Error loading Topics data from" source ":" (.getMessage e)))))
 
 ;; Helper function to strip HTML tags for text content searching
-(defn strip-html [html]
-  (-> html
-      (str/replace #"<[^>]*>" "")
-      (str/replace #"&nbsp;" " ")
-      (str/replace #"&lt;" "<")
-      (str/replace #"&gt;" ">")
-      (str/replace #"&amp;" "&")
-      (str/replace #"&quot;" "\"")
-      (str/replace #"&apos;" "'")))
+(defn strip-html [^String html]
+  (when html
+    (-> html
+        (str/replace #"<[^>]*>" "")
+        (str/replace #"&nbsp;" " ")
+        (str/replace #"&lt;" "<")
+        (str/replace #"&gt;" ">")
+        (str/replace #"&amp;" "&")
+        (str/replace #"&quot;" "\"")
+        (str/replace #"&apos;" "'"))))
 
 ;; Protect search input by handling potentially harmful characters
-(defn sanitize-search-query [query]
+(defn sanitize-search-query [^String query]
   (when query
     (-> query
-        (str/replace #"[<>]" "")           ;; Remove < and > characters
-        (str/replace #"[\\'\";`]" "")      ;; Remove quotes and other potentially harmful chars
-        (str/trim))))                       ;; Trim whitespace
+        (str/replace #"[<>]" "")           
+        (str/replace #"[\\'\";`]" "")      
+        (str/trim))))                      
 
 ;; Normalize text for improved matching
-(defn normalize-text [text]
+(defn normalize-text [^String text]
   (when text
     (-> text
         (str/lower-case)
@@ -140,7 +140,6 @@
 (defn get-topics-by-category [category topics-data]
   (filter #(= (last (:path %)) category) topics-data))
 
-;; Pico.css HTML Templates
 (defn pico-page-layout [page-title content title tagline footer source base-path]
   (str "<!DOCTYPE html>
 <html lang=\"fr\" data-theme=\"light\">
@@ -224,7 +223,6 @@
   (str "<div>
   <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
   <h2>" category-name "</h2>
-
   <div>"
        (str/join "\n"
                  (for [item category-topics]
@@ -240,7 +238,6 @@
   <a href=\"" (with-base-path "/" base-path) "\" class=\"back-link\">Retour à l'accueil</a>
   <h2>Résultats de recherche</h2>
   <p>Résultats pour \"" query "\" (" (count results) ") :</p>
-
   <div>"
        (if (empty? results)
          "<div class=\"alert alert-info\">
@@ -324,18 +321,15 @@
   (fn [{:keys [request-method uri query-string]}]
     (let [path   (strip-base-path uri (:base-path settings))
           params (parse-query-string query-string)]
-
       (case [request-method path]
         [:get "/"]
         (html-response 200 "Accueil"
                        (home-content topics-data (:base-path settings))
                        settings)
-
         [:get "/robots.txt"]
         {:status  200
          :headers {"Content-Type" "text/plain"}
          :body    "User-agent: *\nAllow: /\n"}
-
         [:get "/category"]
         (let [category-name   (:name params)
               category-topics (get-topics-by-category category-name topics-data)]
@@ -343,7 +337,6 @@
                          (str "Catégorie : " category-name)
                          (category-content category-name category-topics (:base-path settings))
                          settings))
-
         [:get "/search"]
         (let [query   (:q params)
               results (search-topics query topics-data)]
@@ -351,7 +344,6 @@
                          (str "Résultats pour : " query)
                          (search-content query results (:base-path settings))
                          settings))
-
         [:get "/topics"]
         (let [id   (:id params)
               item (first (filter #(= (:title %) id) topics-data))]
@@ -364,7 +356,6 @@
                            "404"
                            (error-content (:base-path settings) :not-found)
                            settings)))
-
         ;; Default route - 404
         (html-response 404
                        "Page non trouvée"
