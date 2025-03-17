@@ -274,7 +274,7 @@
      :confirmation-error                          "Confirmation error"
      :confirmation-error-message                  "The confirmation link is invalid or has expired. Please try subscribing again."
      :confirmation-email-failed                   "Confirmation email could not be sent"
-     :confirmation-email-failed-message           "We couldn't send a confirmation email to <strong>%s</strong>. Please try again later or contact the administrator."
+     :confirmation-email-failed-message           "We couldn't send a confirmation email to <strong>%s</strong>. Please try again later."
      :tokens                                      "Available confirmation tokens"
      :tokens-message                              "Currently there are %s pending confirmation tokens."
      :subscription-confirmation-success           "Subscription confirmed"
@@ -300,7 +300,7 @@
      :unsubscribe-button "Désabonnement"}
     :messages
     {:back-to-subscription                        "Retour à l'accueil"
-     :thank-you                                   "Merci !"
+     :thank-you                                   "Merci !"
      :success-subscribe                           "Votre adresse e-mail <strong>%s</strong> a été abonnée avec succès."
      :already-subscribed                          "Déjà abonné"
      :already-subscribed-message                  "L'adresse e-mail <strong>%s</strong> est déjà abonnée."
@@ -319,18 +319,18 @@
      :unknown-action                              "Action inconnue demandée. Veuillez réessayer."
      :server-error                                "Une erreur inattendue s'est produite. Veuillez réessayer plus tard."
      :confirmation-sent                           "Email de confirmation envoyé"
-     :confirmation-sent-message                   "Un email de confirmation a été envoyé à <strong>%s</strong>. Veuillez vérifier votre boîte de réception et cliquer sur le lien de confirmation pour finaliser votre abonnement."
+     :confirmation-sent-message                   "Un email de confirmation a été envoyé à <strong>%s</strong>.<br/>Veuillez vérifier votre boîte de réception et cliquer sur le lien de confirmation pour finaliser votre abonnement."
      :confirmation-success                        "Abonnement confirmé"
-     :confirmation-success-message                "Votre abonnement a été confirmé. Merci de vous être abonné !"
+     :confirmation-success-message                "Votre abonnement a été confirmé. Merci de vous être abonné !"
      :confirmation-error                          "Erreur de confirmation"
-     :confirmation-error-message                  "Le lien de confirmation n'est pas valide ou a expiré. Veuillez essayer de vous abonner à nouveau."
-     :confirmation-email-failed                   "L'email de confirmation n'a pas pu être envoyé"
-     :confirmation-email-failed-message           "Nous n'avons pas pu envoyer un email de confirmation à <strong>%s</strong>. Veuillez réessayer plus tard ou contacter l'administrateur."
+     :confirmation-error-message                  "Le lien de confirmation n'est pas valide ou a expiré.<br/>Veuillez essayer de vous abonner à nouveau."
+     :confirmation-email-failed                   "L'email de confirmation n'a pas pu être envoyé."
+     :confirmation-email-failed-message           "Nous n'avons pas pu envoyer un email de confirmation à <strong>%s</strong>.<br/>Veuillez réessayer plus tard."
      :tokens                                      "Jetons de confirmation disponibles"
      :tokens-message                              "Il y a actuellement %s jetons de confirmation en attente."
      :subscription-confirmation-success           "Abonnement confirmé"
      :subscription-confirmation-success-message
-     "Merci ! Votre adresse e-mail <strong>%s</strong> a été ajoutée à notre liste de diffusion."
+     "Merci ! Votre adresse e-mail <strong>%s</strong> a été ajoutée à notre liste de diffusion."
      :unsubscription-confirmation-success         "Désabonnement confirmé"
      :unsubscription-confirmation-success-message "Votre demande de désabonnement pour <strong>%s</strong> a été traitée."}
     :emails
