@@ -76,13 +76,13 @@
 
 (def cli-options
   {:help      {:alias :h :desc "Display help"}
-   :config    {:alias :c :desc "Config file path" :coerce :string}
+   :version   {:alias :v :desc "Describe version"}
    :port      {:alias :p :desc "Port number" :default 8080 :coerce :int}
-   :base-path {:alias :b :desc "Base path" :coerce :string}
-   :base-url  {:alias :u :desc "Base URL for confirmation links" :coerce :string}
+   :base-path {:alias :p :desc "Base path" :coerce :string}
+   :base-url  {:alias :u :desc "Base URL for confirmation links (no port)" :coerce :string}
    :log-level {:alias :l :desc "Log level (debug, info, warn, error)" :default "info" :coerce :string}
-   :log-file  {:alias :L :desc "Log file" :coerce :string}
-   :version   {:alias :v :desc "Describe version"}})
+   :config    {:alias :C :desc "Config file path" :coerce :string}
+   :log-file  {:alias :L :desc "Log file" :coerce :string}})
 
 (defn print-usage []
   (println "Usage: subscribe [options]")
