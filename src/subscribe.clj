@@ -40,6 +40,7 @@
 ;;
 ;; - ui-strings
 ;; - mailgun-api-endpoint
+;; - mailgun-api-key
 ;; - mailgun-list-id
 ;; - mailgun-list-name
 ;; - base-url
@@ -281,12 +282,12 @@
      :unsubscription-confirmation-success         "Unsubscription confirmed"
      :unsubscription-confirmation-success-message "Your unsubscription request for <strong>%s</strong> has been processed."}
     :emails
-    {:confirm-subject               "[%s] Please confirm your request"
-     :confirm-body-text             "Thank you for subscribing to our mailing list with your email address: %s.\n\nPlease confirm your subscription by clicking on this link:\n\n%s\n\nIf you did not request this subscription, you can ignore this email."
-     :confirm-body-html             "<html><body><p>Thank you for subscribing to our mailing list with your email address: <strong>%s</strong>.</p><p>Please confirm your subscription by clicking on the following link:</p><p><a href=\"%s\">Confirm your subscription</a></p><p>If you did not request this subscription, you can ignore this email.</p></body></html>"
-     :unsubscribe-confirm-subject   "Please confirm your unsubscription"
-     :unsubscribe-confirm-body-text "You have requested to unsubscribe from our mailing list with the email address: %s.\n\nPlease confirm your unsubscription by clicking on the following link:\n\n%s\n\nIf you did not request this unsubscription, you can ignore this email."
-     :unsubscribe-confirm-body-html "<html><body><p>You have requested to unsubscribe from our mailing list with the email address: <strong>%s</strong>.</p><p>Please confirm your unsubscription by clicking on the following link:</p><p><a href=\"%s\">Confirm your unsubscription</a></p><p>If you did not request this unsubscription, you can ignore this email.</p></body></html>"}}
+    {:subscription-confirm-subject   "[%s] Please confirm your subscription"
+     :subscription-confirm-body-text "Thank you for subscribing to our mailing list with your email address: %s.\n\nPlease confirm your subscription by clicking on this link:\n\n%s\n\nIf you did not request this subscription, you can ignore this email."
+     :subscription-confirm-body-html "<html><body><p>Thank you for subscribing to our mailing list with your email address: <strong>%s</strong>.</p><p>Please confirm your subscription by clicking on the following link:</p><p><a href=\"%s\">Confirm your subscription</a></p><p>If you did not request this subscription, you can ignore this email.</p></body></html>"
+     :unsubscribe-confirm-subject    "[%s] Please confirm your unsubscription"
+     :unsubscribe-confirm-body-text  "You have requested to unsubscribe from our mailing list with the email address: %s.\n\nPlease confirm your unsubscription by clicking on the following link:\n\n%s\n\nIf you did not request this unsubscription, you can ignore this email."
+     :unsubscribe-confirm-body-html  "<html><body><p>You have requested to unsubscribe from our mailing list with the email address: <strong>%s</strong>.</p><p>Please confirm your unsubscription by clicking on the following link:</p><p><a href=\"%s\">Confirm your unsubscription</a></p><p>If you did not request this unsubscription, you can ignore this email.</p></body></html>"}}
    :fr
    {:page
     {:title      "Abonnement par e-mail"
@@ -333,12 +334,12 @@
      :unsubscription-confirmation-success         "Désabonnement confirmé"
      :unsubscription-confirmation-success-message "Votre demande de désabonnement pour <strong>%s</strong> a été traitée."}
     :emails
-    {:confirm-subject               "[%s] Veuillez confirmer votre demande"
-     :confirm-body-text             "Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : %s.\n\nVeuillez confirmer votre abonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail."
-     :confirm-body-html             "<html><body><p>Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre abonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre abonnement</a></p><p>Si vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail.</p></body></html>"
-     :unsubscribe-confirm-subject   "Veuillez confirmer votre désabonnement"
-     :unsubscribe-confirm-body-text "Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : %s.\n\nVeuillez confirmer votre désabonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail."
-     :unsubscribe-confirm-body-html "<html><body><p>Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre désabonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre désabonnement</a></p><p>Si vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail.</p></body></html>"}}})
+    {:subscription-confirm-subject   "[%s] Veuillez confirmer votre abonnement"
+     :subscription-confirm-body-text "Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : %s.\n\nVeuillez confirmer votre abonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail."
+     :subscription-confirm-body-html "<html><body><p>Merci de vous être abonné à notre liste de diffusion avec votre adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre abonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre abonnement</a></p><p>Si vous n'avez pas demandé cet abonnement, vous pouvez ignorer cet e-mail.</p></body></html>"
+     :unsubscribe-confirm-subject    "[%s] Veuillez confirmer votre désabonnement"
+     :unsubscribe-confirm-body-text  "Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : %s.\n\nVeuillez confirmer votre désabonnement en cliquant sur le lien suivant :\n\n%s\n\nSi vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail."
+     :unsubscribe-confirm-body-html  "<html><body><p>Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre désabonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre désabonnement</a></p><p>Si vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail.</p></body></html>"}}})
 
 (def app-config
   (atom {:mailgun-list-id      (System/getenv "MAILGUN_LIST_ID")
@@ -699,9 +700,9 @@
         ;; Email templates based on action
         email-templates
         {:subscribe
-         {:subject   (get-in strings [:emails :confirm-subject])
-          :body-text (get-in strings [:emails :confirm-body-text])
-          :body-html (get-in strings [:emails :confirm-body-html])}
+         {:subject   (get-in strings [:emails :subscription-confirm-subject])
+          :body-text (get-in strings [:emails :subscription-confirm-body-text])
+          :body-html (get-in strings [:emails :subscription-confirm-body-html])}
          :unsubscribe
          {:subject   (get-in strings [:emails :unsubscribe-confirm-subject])
           :body-text (get-in strings [:emails :unsubscribe-confirm-body-text])
