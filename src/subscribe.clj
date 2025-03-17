@@ -37,7 +37,6 @@
 ;;
 ;; This config file can let you set/override these variables:
 ;;
-;; - default-language      # :en or :fr right now
 ;; - ui-strings
 ;; - mailgun-api-endpoint
 ;; - mailgun-list-id
@@ -130,7 +129,6 @@
          #(re-matches #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" %)
          #(not (re-find #"\.{2,}|@{2,}|\_{2,}|\-{2,}" %))))
 
-(s/def ::default-language keyword?)
 (s/def ::ui-strings map?)
 (s/def ::mailgun-list-id string?)
 (s/def ::mailgun-api-endpoint string?)
@@ -141,8 +139,7 @@
                 ::subscribe-smtp-from]))
 
 (s/def ::config
-  (s/keys :opt-un [::default-language
-                   ::ui-strings
+  (s/keys :opt-un [::ui-strings
                    ::mailgun-list-id
                    ::mailgun-api-endpoint
                    ::base-path
@@ -340,8 +337,7 @@
      :unsubscribe-confirm-body-html "<html><body><p>Vous avez demandé à vous désabonner de notre liste de diffusion avec l'adresse e-mail : <strong>%s</strong>.</p><p>Veuillez confirmer votre désabonnement en cliquant sur le lien suivant :</p><p><a href=\"%s\">Confirmer votre désabonnement</a></p><p>Si vous n'avez pas demandé ce désabonnement, vous pouvez ignorer cet e-mail.</p></body></html>"}}})
 
 (def app-config
-  (atom {:default-language     :en
-         :mailgun-list-id      (System/getenv "MAILGUN_LIST_ID")
+  (atom {:mailgun-list-id      (System/getenv "MAILGUN_LIST_ID")
          :mailgun-api-endpoint (or (System/getenv "MAILGUN_API_ENDPOINT")
                                    "https://api.mailgun.net/v3")
          :mailgun-api-key      (System/getenv "MAILGUN_API_KEY")
@@ -507,10 +503,10 @@
         (catch Exception e
           (log/error "Error in cleanup scheduler:" (.getMessage e)))))))
 
-;; Helper function to get strings for a specific language
-(defn get-strings
-  ([lang] (get (config :ui-strings) lang (get (config :ui-strings) (config :default-language))))
-  ([] (get-strings (config :default-language))))
+;; Helper function to get UI strings for a specific language
+(defn get-ui-strings
+  ([lang] (get (config :ui-strings) lang))
+  ([] (get-ui-strings :en)))
 
 ;; Configure Selmer HTML escape handling
 (filters/add-filter! :safe-str (fn [x] [:safe x]))
@@ -518,7 +514,7 @@
 ;; Selmer Templates
 (def index-template
   "<!DOCTYPE html>
-<html lang=\"{{language}}\">
+<html lang=\"{{lang}}\">
 <head>
   <meta charset=\"UTF-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
@@ -624,7 +620,7 @@
 
 (def confirmation-template
   "<!DOCTYPE html>
-<html lang=\"{{language}}\">
+<html lang=\"{{lang}}\">
 <head>
   <meta charset=\"UTF-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
@@ -691,8 +687,8 @@
 (defn send-confirmation-email
   "Send a confirmation email for subscribe or unsubscribe actions."
   [{:keys [email token lang action]
-    :or   {action :subscribe lang (config :default-language)}}]
-  (let [strings     (get-strings lang)
+    :or   {action :subscribe lang :en}}]
+  (let [strings     (get-ui-strings lang)
         confirm-url (create-confirmation-url {:token token})
         from        (or (config :subscribe-smtp-from) "noreply@example.com")
         ;; Email templates based on action
@@ -784,12 +780,11 @@
           (swap! app-config merge processed-config))))))
 
 (defn determine-language [req]
-  (let [accept-language (get-in req [:headers "accept-language"] "")
-        default-lang    (config :default-language)]
+  (let [accept-language (get-in req [:headers "accept-language"] "")]
     (cond
       ;; Check Accept-Language header for supported languages
       (str/includes? accept-language "fr") :fr
-      :else                                default-lang)))
+      :else                                :en)))
 
 (defn get-client-ip [req]
   (or (get-in req [:headers "x-forwarded-for"])
@@ -835,10 +830,10 @@
         (str/replace "'" "&#39;"))))
 
 ;; Render HTML template using Selmer
-(defn render-index-html [strings language csrf-token]
+(defn render-index-html [strings lang csrf-token]
   (selmer/render
    index-template
-   {:language       language
+   {:lang           lang
     :page           (:page strings)
     :form           (:form strings)
     :subscribe_path (make-path "subscribe")
@@ -850,7 +845,7 @@
             (= heading (get-in strings [:messages :unsubscription-confirmation-success])))]
     (selmer/render
      confirmation-template
-     {:language       lang
+     {:lang           lang
       :page-title     (:title (:page strings))
       :message-type   message-type
       :heading        heading
@@ -861,7 +856,7 @@
       :show-back-link show-back-link})))
 
 (defn result-template [strings type message-key & args]
-  (let [lang     (keyword (or (first (filter keyword? args)) (config :default-language)))
+  (let [lang     (keyword (or (first (filter keyword? args)) :en))
         heading  (get-in strings [:messages message-key])
         message  (get-in strings [:messages (keyword (str (name message-key) "-message"))])
         msg-args (filter string? args)]
@@ -875,7 +870,7 @@
        message))))
 
 (defn debug-result-template [strings type message & debug-info]
-  (let [lang      (or (first (filter keyword? debug-info)) (config :default-language))
+  (let [lang      (or (first (filter keyword? debug-info)) :en)
         debug-str (when (seq debug-info)
                     (str "\n\nDebug Info:\n" (escape-html (str (remove keyword? debug-info)))))]
     (render-confirmation-html
@@ -907,7 +902,7 @@
   (log/error "Error:" (str e))
   (log/error "Stack trace:" (with-out-str (.printStackTrace e)))
   (let [lang    (determine-language req)
-        strings (get-strings lang)]
+        strings (get-ui-strings lang)]
     {:status  500
      :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
      :body    (debug-result-template
@@ -1062,7 +1057,7 @@
 
 (defn handle-index [req]
   (let [lang       (determine-language req)
-        strings    (get-strings lang)
+        strings    (get-ui-strings lang)
         client-ip  (get-client-ip req)
         csrf-token (get-or-create-csrf-token client-ip)]
     (log/debug "Using CSRF token for IP" client-ip ":" csrf-token)
@@ -1078,7 +1073,7 @@
       (try
         (letfn [(decode-value [s]
                   (try (java.net.URLDecoder/decode s "UTF-8")
-                       (catch Exception e "")))
+                       (catch Exception _ "")))
                 (parse-pair [pair]
                   (let [[k v] (str/split pair #"=" 2)
                         key   (keyword (decode-value k))
@@ -1215,7 +1210,7 @@
           action          (or (:action form-data) "subscribe")
           client-ip       (get-client-ip req)
           lang            (determine-language req)
-          strings         (get-strings lang)
+          strings         (get-ui-strings lang)
           form-csrf-token (:csrf_token form-data)
           session-token   (get @session-store client-ip)]
       (log/debug "Parsed form data:" (pr-str form-data))
@@ -1256,7 +1251,7 @@
 
 (defn handle-tokens [req]
   (let [lang      (determine-language req)
-        strings   (get-strings lang)
+        strings   (get-ui-strings lang)
         count-str (str (count @pending-subscriptions))]
     {:status  200
      :headers (merge {"Content-Type" "text/html; charset=UTF-8"} security-headers)
@@ -1267,7 +1262,7 @@
     (let [query-params (:query-params req)
           token        (:token query-params)
           lang         (determine-language req)
-          strings      (get-strings lang)]
+          strings      (get-ui-strings lang)]
       (log/info "Handling confirmation with token:" token)
       (log/info "Query params:" (pr-str query-params))
       (if (str/blank? token)
