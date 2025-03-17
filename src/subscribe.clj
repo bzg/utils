@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-;; Copyright (c) DINUM, Bastien Guerry
+;; Copyright (c) Bastien Guerry
 ;; SPDX-License-Identifier: EPL-2.0
 ;; License-Filename: EPL-2.0.txt
 
