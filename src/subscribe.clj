@@ -523,7 +523,7 @@
 <head>
   <meta charset=\"UTF-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-  <title>{{page.title}}</title>
+  <title>{{page.title}}{% if list-name|not-empty %} - {{list-name}}{% endif %}</title>
   <link rel=\"icon\" href=\"data:image/png;base64,iVBORw0KGgo=\">
   <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css\">
   <script src=\"https://unpkg.com/htmx.org@2.0.0\"></script>
@@ -599,7 +599,7 @@
   <main class=\"container\">
     <article>
       <div>
-          <h1>{{page.heading}}</h1>
+          <h1>{% firstof list-name page.heading %}</h1>
           <p>{{page.subheading}}</p>
         <form hx-post=\"{{subscribe_path}}\" hx-target=\"#result\" hx-swap=\"outerHTML\" hx-indicator=\"#loading\">
           <input type=\"email\" id=\"email\" name=\"email\" placeholder=\"{{form.email-placeholder}}\" required>
@@ -629,7 +629,7 @@
 <head>
   <meta charset=\"UTF-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-  <title>{{page-title}}</title>
+  <title>{{page-title}}{% if list-name|not-empty %} - {{list-name}}{% endif %}</title>
   <link rel=\"icon\" href=\"data:image/png;base64,iVBORw0KGgo=\">
   <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css\">
   <script src=\"https://unpkg.com/htmx.org@2.0.0\"></script>
@@ -808,7 +808,7 @@
     (when (or (> (- now @last-pruned-time) rate-limit-window)
               (> (count @ip-request-log) 1000))
       (swap! ip-request-log
-             (fn [log-map] 
+             (fn [log-map]
                (reduce-kv (fn [m k v] (assoc m k (filter #(>= % window-start) v)))
                           {} log-map)))
       (reset! last-pruned-time now))
@@ -841,6 +841,7 @@
   (selmer/render
    index-template
    {:lang           lang
+    :list-name      (config :mailgun-list-name)
     :page           (:page strings)
     :form           (:form strings)
     :subscribe_path (make-path "subscribe")
@@ -854,6 +855,7 @@
      confirmation-template
      {:lang           lang
       :page-title     (:title (:page strings))
+      :list-name      (config :mailgun-list-name)
       :message-type   message-type
       :heading        heading
       :message        message
